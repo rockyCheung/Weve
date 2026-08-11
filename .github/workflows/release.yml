@@ -41,6 +41,7 @@ jobs:
       - run: npm ci
 
       - name: Sync version from tag
+        shell: bash
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
