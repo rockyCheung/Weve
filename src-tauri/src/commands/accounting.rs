@@ -249,7 +249,7 @@ pub fn get_vouchers(state: State<AppState>, start_date: String, end_date: String
     
     let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
     let voucher_ids: Vec<i64> = stmt.query_map([], |row| {
-        Ok(row.get::<_, i64>(0)?)
+        row.get::<_, i64>(0)
     }).map_err(|e| e.to_string())?
     .filter_map(|r| r.ok())
     .collect();

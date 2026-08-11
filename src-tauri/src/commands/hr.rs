@@ -179,9 +179,7 @@ pub fn record_attendance(state: State<AppState>, input: AttendanceInput) -> Resu
     let db = state.db.lock().map_err(|e| e.to_string())?;
     
     // 判断是签到还是签退，自动设置状态
-    let status = if input.check_in.is_some() && input.check_out.is_some() {
-        "present"
-    } else if input.check_in.is_some() {
+    let status = if input.check_in.is_some() || input.check_out.is_some() {
         "present"
     } else {
         "absent"

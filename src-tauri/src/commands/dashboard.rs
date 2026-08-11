@@ -228,39 +228,26 @@ pub fn get_recent_activities(state: State<AppState>) -> Result<Vec<RecentActivit
         Ok((tax_type, period, due_date))
     }).map_err(|e| e.to_string())?;
 
-    for item in tax_items {
-        if let Ok((tax_type, period, due_date)) = item {
-            let due = NaiveDate::parse_from_str(&due_date, "%Y-%m-%d").unwrap_or(today);
-            let days_remaining = (due - today).num_days();
-            
-            let (title, urgency) = match tax_type.as_str() {
-                "vat" => (
-                    format!("增值税申报截止（{}）", period),
-                    if days_remaining < 0 { "overdue" } else if days_remaining <= 7 { "urgent" } else { "normal" }
-                ),
-                "cit" => (
-                    format!("企业所得税申报截止（{}）", period),
-                    if days_remaining < 0 { "overdue" } else if days_remaining <= 7 { "urgent" } else { "normal" }
-                ),
-                "personal_income" => (
-                    format!("个人所得税申报截止（{}）", period),
-                    if days_remaining < 0 { "overdue" } else if days_remaining <= 7 { "urgent" } else { "normal" }
-                ),
-                _ => (
-                    format!("{}申报截止（{}）", tax_type, period),
-                    if days_remaining < 0 { "overdue" } else if days_remaining <= 7 { "urgent" } else { "normal" }
-                ),
-            };
+    for (tax_type, period, due_date) in tax_items.flatten() {
+        let due = NaiveDate::parse_from_str(&due_date, "%Y-%m-%d").unwrap_or(today);
+        let days_remaining = (due - today).num_days();
+        
+        let title = match tax_type.as_str() {
+            "vat" => format!("增值税申报截止（{}）", period),
+            "cit" => format!("企业所得税申报截止（{}）", period),
+            "personal_income" => format!("个人所得税申报截止（{}）", period),
+            _ => format!("{}申报截止（{}）", tax_type, period),
+        };
+        let urgency = if days_remaining < 0 { "overdue" } else if days_remaining <= 7 { "urgent" } else { "normal" };
 
-            activities.push(RecentActivity {
-                id: activities.len() as i64 + 1,
-                activity_type: "tax_due".to_string(),
-                title,
-                description: format!("截止日期: {}, 剩余{}天", due_date, days_remaining.max(0)),
-                date: due_date,
-                urgency: urgency.to_string(),
-            });
-        }
+        activities.push(RecentActivity {
+            id: activities.len() as i64 + 1,
+            activity_type: "tax_due".to_string(),
+            title,
+            description: format!("截止日期: {}, 剩余{}天", due_date, days_remaining.max(0)),
+            date: due_date,
+            urgency: urgency.to_string(),
+        });
     }
 
     // 添加发票到期提醒
@@ -281,21 +268,19 @@ pub fn get_recent_activities(state: State<AppState>) -> Result<Vec<RecentActivit
         Ok((id, invoice_no, date, buyer))
     }).map_err(|e| e.to_string())?;
 
-    for inv in invoices {
-        if let Ok((id, invoice_no, date, buyer)) = inv {
-            let inv_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d").unwrap_or(today);
-            let days_to_expiry = 360 - (today - inv_date).num_days();
-            
-            if days_to_expiry <= 90 {
-                activities.push(RecentActivity {
-                    id: 1000 + id,
-                    activity_type: "invoice_due".to_string(),
-                    title: format!("发票认证到期提醒 - {}", invoice_no),
-                    description: format!("销售方: {}, 剩余{}天认证期", buyer, days_to_expiry.max(0)),
-                    date: (inv_date + chrono::Duration::days(360)).format("%Y-%m-%d").to_string(),
-                    urgency: if days_to_expiry <= 30 { "overdue".to_string() } else if days_to_expiry <= 90 { "urgent".to_string() } else { "normal".to_string() },
-                });
-            }
+    for (id, invoice_no, date, buyer) in invoices.flatten() {
+        let inv_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d").unwrap_or(today);
+        let days_to_expiry = 360 - (today - inv_date).num_days();
+        
+        if days_to_expiry <= 90 {
+            activities.push(RecentActivity {
+                id: 1000 + id,
+                activity_type: "invoice_due".to_string(),
+                title: format!("发票认证到期提醒 - {}", invoice_no),
+                description: format!("销售方: {}, 剩余{}天认证期", buyer, days_to_expiry.max(0)),
+                date: (inv_date + chrono::Duration::days(360)).format("%Y-%m-%d").to_string(),
+                urgency: if days_to_expiry <= 30 { "overdue".to_string() } else if days_to_expiry <= 90 { "urgent".to_string() } else { "normal".to_string() },
+            });
         }
     }
 
