@@ -90,7 +90,14 @@ pub fn get_dashboard_stats(state: State<AppState>) -> Result<DashboardStats, Str
     // 待申报税种
     let pending_tax_reports: i64 = db.query_row(
         "SELECT COUNT(*) FROM tax_calendar tc
-         LEFT JOIN tax_reports tr ON tc.tax_type = tr.report_type AND tc.period = tr.period
+         LEFT JOIN tax_reports tr ON 
+            CASE tc.tax_type
+                WHEN 'vat' THEN 'vat_monthly'
+                WHEN 'cit' THEN 'cit_quarterly'
+                WHEN 'surcharge' THEN 'surcharge'
+                WHEN 'personal_income' THEN 'personal_income'
+                ELSE tc.tax_type
+            END = tr.report_type AND tc.period = tr.period
          WHERE (tr.status IS NULL OR tr.status != 'submitted')
          AND date(tc.due_date) >= date('now')",
         [],
@@ -100,7 +107,14 @@ pub fn get_dashboard_stats(state: State<AppState>) -> Result<DashboardStats, Str
     // 已逾期税种
     let overdue_tax_items: i64 = db.query_row(
         "SELECT COUNT(*) FROM tax_calendar tc
-         LEFT JOIN tax_reports tr ON tc.tax_type = tr.report_type AND tc.period = tr.period
+         LEFT JOIN tax_reports tr ON 
+            CASE tc.tax_type
+                WHEN 'vat' THEN 'vat_monthly'
+                WHEN 'cit' THEN 'cit_quarterly'
+                WHEN 'surcharge' THEN 'surcharge'
+                WHEN 'personal_income' THEN 'personal_income'
+                ELSE tc.tax_type
+            END = tr.report_type AND tc.period = tr.period
          WHERE (tr.status IS NULL OR tr.status != 'submitted')
          AND date(tc.due_date) < date('now')",
         [],
@@ -110,7 +124,14 @@ pub fn get_dashboard_stats(state: State<AppState>) -> Result<DashboardStats, Str
     // 即将到期（7天内）
     let upcoming_deadlines: i64 = db.query_row(
         "SELECT COUNT(*) FROM tax_calendar tc
-         LEFT JOIN tax_reports tr ON tc.tax_type = tr.report_type AND tc.period = tr.period
+         LEFT JOIN tax_reports tr ON 
+            CASE tc.tax_type
+                WHEN 'vat' THEN 'vat_monthly'
+                WHEN 'cit' THEN 'cit_quarterly'
+                WHEN 'surcharge' THEN 'surcharge'
+                WHEN 'personal_income' THEN 'personal_income'
+                ELSE tc.tax_type
+            END = tr.report_type AND tc.period = tr.period
          WHERE (tr.status IS NULL OR tr.status != 'submitted')
          AND date(tc.due_date) BETWEEN date('now') AND date('now', '+7 days')",
         [],
@@ -187,7 +208,14 @@ pub fn get_recent_activities(state: State<AppState>) -> Result<Vec<RecentActivit
     let mut stmt = db.prepare(
         "SELECT tc.id, tc.tax_type, tc.period, tc.due_date
          FROM tax_calendar tc
-         LEFT JOIN tax_reports tr ON tc.tax_type = tr.report_type AND tc.period = tr.period
+         LEFT JOIN tax_reports tr ON 
+            CASE tc.tax_type
+                WHEN 'vat' THEN 'vat_monthly'
+                WHEN 'cit' THEN 'cit_quarterly'
+                WHEN 'surcharge' THEN 'surcharge'
+                WHEN 'personal_income' THEN 'personal_income'
+                ELSE tc.tax_type
+            END = tr.report_type AND tc.period = tr.period
          WHERE (tr.status IS NULL OR tr.status != 'submitted')
          ORDER BY tc.due_date ASC
          LIMIT 10"

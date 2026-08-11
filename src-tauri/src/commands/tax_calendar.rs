@@ -90,6 +90,17 @@ fn get_tax_type_label(tax_type: &str) -> &str {
     }
 }
 
+/// 税种编码映射（tax_calendar → tax_reports）
+fn map_report_type(tax_type: &str) -> &str {
+    match tax_type {
+        "vat" => "vat_monthly",
+        "cit" => "cit_quarterly",
+        "surcharge" => "surcharge",
+        "personal_income" => "personal_income",
+        _ => tax_type,
+    }
+}
+
 /// 获取期间标签
 fn get_period_label(tax_type: &str, period: &str) -> String {
     match tax_type {
@@ -127,9 +138,10 @@ pub fn generate_tax_calendar(state: State<AppState>, year: i32) -> Result<Vec<Ta
             let days_remaining = (due_date - today).num_days();
             
             // 检查是否已申报
+            let mapped_type = map_report_type(&tax_type);
             let is_submitted: bool = db.query_row(
                 "SELECT COUNT(*) > 0 FROM tax_reports WHERE report_type = ?1 AND period = ?2 AND status = 'submitted'",
-                rusqlite::params![tax_type, period],
+                rusqlite::params![mapped_type, period],
                 |row| row.get(0),
             ).unwrap_or(false);
             
@@ -151,7 +163,7 @@ pub fn generate_tax_calendar(state: State<AppState>, year: i32) -> Result<Vec<Ta
             // 获取税额
             let tax_amount: f64 = db.query_row(
                 "SELECT COALESCE(tax_amount, 0) FROM tax_reports WHERE report_type = ?1 AND period = ?2",
-                rusqlite::params![tax_type, period],
+                rusqlite::params![mapped_type, period],
                 |row| row.get(0),
             ).unwrap_or(0.0);
             
@@ -198,7 +210,14 @@ pub fn get_tax_calendar(state: State<AppState>, year: Option<i32>) -> Result<Vec
                      WHEN date(tc.due_date) < date('now') THEN 'overdue' 
                      ELSE 'pending' END as status
          FROM tax_calendar tc
-         LEFT JOIN tax_reports tr ON tc.tax_type = tr.report_type AND tc.period = tr.period
+         LEFT JOIN tax_reports tr ON 
+            CASE tc.tax_type
+                WHEN 'vat' THEN 'vat_monthly'
+                WHEN 'cit' THEN 'cit_quarterly'
+                WHEN 'surcharge' THEN 'surcharge'
+                WHEN 'personal_income' THEN 'personal_income'
+                ELSE tc.tax_type
+            END = tr.report_type AND tc.period = tr.period
          WHERE tc.due_date LIKE ?1
          ORDER BY tc.due_date ASC"
     ).map_err(|e| e.to_string())?;
@@ -243,12 +262,37 @@ pub fn mark_as_reminded(state: State<AppState>, id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn mark_as_submitted(state: State<AppState>, report_type: String, period: String) -> Result<(), String> {
+pub fn mark_as_submitted(state: State<AppState>, id: i64) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.execute(
-        "UPDATE tax_reports SET status = 'submitted', updated_at = datetime('now', 'localtime') WHERE report_type = ?1 AND period = ?2",
-        rusqlite::params![report_type, period],
+
+    // 获取税种和期间信息
+    let (tax_type, period): (String, String) = db.query_row(
+        "SELECT tax_type, period FROM tax_calendar WHERE id = ?1",
+        rusqlite::params![id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
     ).map_err(|e| e.to_string())?;
+
+    // 更新 tax_reports（税种编码映射：vat→vat_monthly, cit→cit_quarterly 等）
+    let report_type = map_report_type(&tax_type);
+
+    let exists: i64 = db.query_row(
+        "SELECT COUNT(*) FROM tax_reports WHERE report_type = ?1 AND period = ?2",
+        rusqlite::params![report_type, period],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    if exists > 0 {
+        db.execute(
+            "UPDATE tax_reports SET status = 'submitted', updated_at = datetime('now', 'localtime') WHERE report_type = ?1 AND period = ?2",
+            rusqlite::params![report_type, period],
+        ).map_err(|e| e.to_string())?;
+    } else {
+        db.execute(
+            "INSERT INTO tax_reports (report_type, period, data, tax_amount, status) VALUES (?1, ?2, '{}', 0, 'submitted')",
+            rusqlite::params![report_type, period],
+        ).map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 
@@ -269,12 +313,21 @@ pub fn check_upcoming_deadlines(state: State<AppState>) -> Result<ReminderNotifi
     // 获取7天内到期的未申报项目
     let mut stmt = db.prepare(
         "SELECT tc.id, tc.tax_type, tc.period, tc.due_date, tc.is_reminded,
-                COALESCE(tr.tax_amount, 0) as tax_amount
+                COALESCE(tr.tax_amount, 0) as tax_amount,
+                CASE WHEN tr.status = 'submitted' THEN 'submitted'
+                     WHEN date(tc.due_date) < date('now') THEN 'overdue'
+                     ELSE 'pending' END as status
          FROM tax_calendar tc
-         LEFT JOIN tax_reports tr ON tc.tax_type = tr.report_type AND tc.period = tr.period
-         WHERE (date(tc.due_date) BETWEEN date('now') AND date('now', '+7 days')
-             OR date(tc.due_date) < date('now'))
-         AND (tr.status IS NULL OR tr.status != 'submitted')
+         LEFT JOIN tax_reports tr ON 
+            CASE tc.tax_type
+                WHEN 'vat' THEN 'vat_monthly'
+                WHEN 'cit' THEN 'cit_quarterly'
+                WHEN 'surcharge' THEN 'surcharge'
+                WHEN 'personal_income' THEN 'personal_income'
+                ELSE tc.tax_type
+            END = tr.report_type AND tc.period = tr.period
+         WHERE date(tc.due_date) BETWEEN date('now') AND date('now', '+7 days')
+            OR date(tc.due_date) < date('now')
          ORDER BY tc.due_date ASC"
     ).map_err(|e| e.to_string())?;
     
@@ -288,6 +341,7 @@ pub fn check_upcoming_deadlines(state: State<AppState>) -> Result<ReminderNotifi
         let due_date_str: String = row.get(3)?;
         let due_date = NaiveDate::parse_from_str(&due_date_str, "%Y-%m-%d").unwrap_or(today);
         let days_remaining = (due_date - today).num_days();
+        let status: String = row.get(6)?;
         
         Ok(TaxCalendarItem {
             id: row.get(0)?,
@@ -297,7 +351,7 @@ pub fn check_upcoming_deadlines(state: State<AppState>) -> Result<ReminderNotifi
             period_label: get_period_label(&tax_type, &period),
             due_date: due_date_str,
             days_remaining,
-            status: if days_remaining < 0 { "overdue".to_string() } else { "pending".to_string() },
+            status,
             is_reminded: row.get::<_, i32>(4)? != 0,
             tax_amount: row.get(5)?,
         })
@@ -305,9 +359,12 @@ pub fn check_upcoming_deadlines(state: State<AppState>) -> Result<ReminderNotifi
     
     for row in rows {
         if let Ok(item) = row {
-            if item.days_remaining < 0 {
+            if item.status == "submitted" {
+                continue;
+            }
+            if item.status == "overdue" {
                 overdue_count += 1;
-            } else if item.days_remaining <= 7 {
+            } else if item.days_remaining >= 0 && item.days_remaining <= 7 {
                 urgent_count += 1;
             }
             items.push(item);
