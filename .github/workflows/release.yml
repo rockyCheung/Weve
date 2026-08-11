@@ -11,6 +11,7 @@ permissions:
 jobs:
   release:
     strategy:
+      max-parallel: 1
       fail-fast: false
       matrix:
         platform: [ubuntu-22.04, macos-latest, windows-latest]
