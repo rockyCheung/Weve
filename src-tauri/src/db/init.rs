@@ -27,7 +27,7 @@ fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
     conn.prepare(&sql)
         .and_then(|mut stmt| {
             let mut rows = stmt.query_map([], |row| {
-                Ok::<String, rusqlite::Error>(row.get(1)?)
+                row.get::<_, String>(1)
             })?;
             Ok(rows.any(|name| name.as_deref() == Ok(column)))
         })

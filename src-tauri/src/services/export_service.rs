@@ -61,14 +61,12 @@ worksheet.write(7, 0, "三、应缴增值税").map_err(|e| e.to_string())?;
     worksheet.write_with_format(16, 3, "进项金额", &header_format).map_err(|e| e.to_string())?;
     worksheet.write_with_format(16, 4, "进项税额", &header_format).map_err(|e| e.to_string())?;
     
-    let mut row = 17;
-    for item in &report.items {
+    for (row, item) in (17..).zip(report.items.iter()) {
         worksheet.write(row, 0, format!("{:.0}%", item.tax_rate * 100.0)).map_err(|e| e.to_string())?;
         worksheet.write_with_format(row, 1, item.output_amount, &money_format).map_err(|e| e.to_string())?;
         worksheet.write_with_format(row, 2, item.output_tax, &money_format).map_err(|e| e.to_string())?;
         worksheet.write_with_format(row, 3, item.input_amount, &money_format).map_err(|e| e.to_string())?;
         worksheet.write_with_format(row, 4, item.input_tax, &money_format).map_err(|e| e.to_string())?;
-        row += 1;
     }
     
     // 设置列宽

@@ -55,10 +55,8 @@ pub fn get_all_settings(state: State<AppState>) -> Result<std::collections::Hash
     let rows = stmt.query_map([], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     }).map_err(|e| e.to_string())?;
-    for row in rows {
-        if let Ok((key, value)) = row {
-            map.insert(key, value);
-        }
+    for (key, value) in rows.flatten() {
+        map.insert(key, value);
     }
     Ok(map)
 }
@@ -140,28 +138,26 @@ pub fn list_backups(_state: State<AppState>) -> Result<Vec<BackupInfo>, String> 
     let mut backups = Vec::new();
     let entries = fs::read_dir(&backup_dir).map_err(|e| e.to_string())?;
     
-    for entry in entries {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if path.extension().map(|e| e == "db").unwrap_or(false) {
-                let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
-                let file_name = path.file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string();
-                
-                // 从文件名提取时间
-                let created_at = file_name
-                    .replace("backup_", "")
-                    .replace(".db", "")
-                    .replace("_", " ");
-                
-                backups.push(BackupInfo {
-                    file_name,
-                    file_size: metadata.len(),
-                    created_at,
-                });
-            }
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().map(|e| e == "db").unwrap_or(false) {
+            let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
+            let file_name = path.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            
+            // 从文件名提取时间
+            let created_at = file_name
+                .replace("backup_", "")
+                .replace(".db", "")
+                .replace("_", " ");
+            
+            backups.push(BackupInfo {
+                file_name,
+                file_size: metadata.len(),
+                created_at,
+            });
         }
     }
     
@@ -234,17 +230,15 @@ fn export_table(db: &rusqlite::Connection, sql: &str) -> Result<Vec<serde_json::
     
     let row_iter = stmt.query_map([], |row| {
         let mut map = serde_json::Map::new();
-        for i in 0..column_count {
+        for (i, name) in column_names.iter().enumerate() {
             let value: String = row.get::<_, String>(i).unwrap_or_default();
-            map.insert(column_names[i].clone(), serde_json::Value::String(value));
+            map.insert(name.clone(), serde_json::Value::String(value));
         }
         Ok(serde_json::Value::Object(map))
     }).map_err(|e| e.to_string())?;
     
-    for row in row_iter {
-        if let Ok(row) = row {
-            rows.push(row);
-        }
+    for row in row_iter.flatten() {
+        rows.push(row);
     }
     
     Ok(rows)
@@ -256,10 +250,8 @@ fn get_all_settings_inner(db: &rusqlite::Connection) -> Result<std::collections:
     let rows = stmt.query_map([], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     }).map_err(|e| e.to_string())?;
-    for row in rows {
-        if let Ok((key, value)) = row {
-            map.insert(key, value);
-        }
+    for (key, value) in rows.flatten() {
+        map.insert(key, value);
     }
     Ok(map)
 }

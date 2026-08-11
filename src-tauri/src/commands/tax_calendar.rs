@@ -45,10 +45,10 @@ fn calculate_due_dates(year: i32, month: u32, taxpayer_type: &str) -> Vec<(Strin
     } else {
         // 小规模纳税人按季度申报
         let quarter_month = match month {
-            1 | 2 | 3 => 4,
-            4 | 5 | 6 => 7,
-            7 | 8 | 9 => 10,
-            10 | 11 | 12 => 1,
+            1..=3 => 4,
+            4..=6 => 7,
+            7..=9 => 10,
+            10..=12 => 1,
             _ => month,
         };
         let q_year = if quarter_month == 1 && month >= 10 { year + 1 } else { year };
@@ -72,7 +72,7 @@ fn calculate_due_dates(year: i32, month: u32, taxpayer_type: &str) -> Vec<(Strin
         _ => None,
     };
     if let Some(cit_due) = quarter_end {
-        let quarter_period = format!("{:04}-Q{}", year, (month + 2) / 3);
+        let quarter_period = format!("{:04}-Q{}", year, month.div_ceil(3));
         items.push(("cit".to_string(), quarter_period, cit_due.format("%Y-%m-%d").to_string()));
     }
     
@@ -357,18 +357,16 @@ pub fn check_upcoming_deadlines(state: State<AppState>) -> Result<ReminderNotifi
         })
     }).map_err(|e| e.to_string())?;
     
-    for row in rows {
-        if let Ok(item) = row {
-            if item.status == "submitted" {
-                continue;
-            }
-            if item.status == "overdue" {
-                overdue_count += 1;
-            } else if item.days_remaining >= 0 && item.days_remaining <= 7 {
-                urgent_count += 1;
-            }
-            items.push(item);
+    for item in rows.flatten() {
+        if item.status == "submitted" {
+            continue;
         }
+        if item.status == "overdue" {
+            overdue_count += 1;
+        } else if item.days_remaining >= 0 && item.days_remaining <= 7 {
+            urgent_count += 1;
+        }
+        items.push(item);
     }
     
     Ok(ReminderNotification {
