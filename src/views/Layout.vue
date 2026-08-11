@@ -31,11 +31,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { HomeFilled, Setting } from "@element-plus/icons-vue";
+import { check } from "@tauri-apps/plugin-updater";
+import { ElMessageBox } from "element-plus";
+import { relaunch } from "@tauri-apps/plugin-process";
 
 const route = useRoute();
+
+const updateAvailable = ref(false);
+
+onMounted(async () => {
+  try {
+    const update = await check();
+    if (update) {
+      updateAvailable.value = true;
+      await ElMessageBox.confirm(
+        `发现新版本 ${update.version}，是否立即更新？\n\n更新内容：${update.body || "请查看发布说明"}`,
+        "软件更新",
+        { confirmButtonText: "立即更新", cancelButtonText: "稍后", type: "info" }
+      );
+      await update.downloadAndInstall();
+      await relaunch();
+    }
+  } catch (e) {
+    // 取消或检查失败，静默忽略
+  }
+});
 
 const breadcrumbMap: Record<string, string> = {
   "/": "首页",
