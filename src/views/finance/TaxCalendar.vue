@@ -294,10 +294,7 @@ const refreshCalendar = () => {
 
 const markSubmitted = async (item: TaxCalendarItem) => {
   try {
-    await invoke('mark_as_submitted', {
-      reportType: item.tax_type,
-      period: item.period,
-    })
+    await invoke('mark_as_submitted', { id: item.id })
     ElMessage.success(`${item.tax_type_label} ${item.period_label} 已标记为已申报`)
     await fetchCalendar()
   } catch (e) {
