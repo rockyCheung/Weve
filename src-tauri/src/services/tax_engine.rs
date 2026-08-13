@@ -196,7 +196,7 @@ pub fn generate_cit_report(conn: &Connection, period: &str) -> Result<CitReport,
         (0.25, false)  // 超过300万，标准税率25%
     };
 
-    let tax_due = profit * tax_rate;
+    let tax_due = (profit * tax_rate).max(0.0);
 
     Ok(CitReport {
         period: period.to_string(),

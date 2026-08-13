@@ -99,6 +99,35 @@ fn migrate_old_schema(conn: &Connection) -> Result<()> {
         if !column_exists(conn, "employees", "housing_fund_base") {
             conn.execute_batch("ALTER TABLE employees ADD COLUMN housing_fund_base REAL NOT NULL DEFAULT 0")?;
         }
+        if !column_exists(conn, "employees", "grade_id") {
+            conn.execute_batch("ALTER TABLE employees ADD COLUMN grade_id INTEGER")?;
+        }
+    }
+
+    // 新建岗位等级表（依赖 employees 的 grade_id 外键，故放在 employees 迁移之后）
+    if !table_exists(conn, "position_grades") {
+        conn.execute_batch(
+            "CREATE TABLE position_grades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                code TEXT NOT NULL UNIQUE,
+                base_salary_min REAL NOT NULL DEFAULT 0,
+                base_salary_max REAL NOT NULL DEFAULT 0,
+                performance_ratio REAL NOT NULL DEFAULT 0,
+                post_coefficient REAL NOT NULL DEFAULT 1.0,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            )",
+        )?;
+    }
+
+    // 为绩效考核表添加多维评价字段
+    if table_exists(conn, "performance_reviews") {
+        for col in ["business_score", "growth_score", "attitude_score", "contribution_score"] {
+            if !column_exists(conn, "performance_reviews", col) {
+                conn.execute_batch(&format!("ALTER TABLE performance_reviews ADD COLUMN {} REAL NOT NULL DEFAULT 0", col))?;
+            }
+        }
     }
 
     Ok(())

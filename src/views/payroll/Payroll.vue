@@ -48,6 +48,21 @@
         <el-table :data="payrollRecords" stripe border size="small" style="width: 100%">
           <el-table-column prop="employee_name" label="姓名" width="80" fixed />
 
+          <el-table-column label="应发" align="center">
+            <el-table-column prop="base_salary" label="基本工资" width="100">
+              <template #default="s">¥{{ fmt(s.row.base_salary) }}</template>
+            </el-table-column>
+            <el-table-column prop="performance_pay" label="绩效" width="90">
+              <template #default="s">¥{{ fmt(s.row.performance_pay) }}</template>
+            </el-table-column>
+            <el-table-column prop="commission" label="提成" width="90">
+              <template #default="s">¥{{ fmt(s.row.commission) }}</template>
+            </el-table-column>
+            <el-table-column prop="bonus" label="奖金" width="90">
+              <template #default="s">¥{{ fmt(s.row.bonus) }}</template>
+            </el-table-column>
+          </el-table-column>
+
           <el-table-column label="公司缴纳" align="center">
             <el-table-column prop="pension_employer" label="养老" width="90">
               <template #default="s">¥{{ fmt(s.row.pension_employer) }}</template>
@@ -112,6 +127,8 @@ interface PayrollRecord {
   base_salary: number;
   attendance_days: number;
   overtime_hours: number;
+  performance_pay: number;
+  commission: number;
   bonus: number;
   deductions: number;
   insurance_base: number;

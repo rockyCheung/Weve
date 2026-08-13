@@ -3,7 +3,7 @@
     <!-- 核心指标卡片 -->
     <el-row :gutter="20" style="margin-bottom: 20px;">
       <el-col :span="6">
-        <el-card shadow="hover">
+        <el-card shadow="hover" class="stat-clickable" @click="$router.push('/hr/employees')">
           <div class="stat-card">
             <div class="stat-icon" style="background: rgba(64, 158, 255, 0.1);">
               <el-icon :size="24" color="#409eff"><User /></el-icon>
@@ -208,7 +208,7 @@ const chartOption = ref({})
 
 const quickLinks = [
   { path: '/hr/employees', label: '员工管理', icon: User, color: '#409eff' },
-  { path: '/hr/payroll', label: '工资表', icon: Money, color: '#67c23a' },
+  { path: '/payroll/salary', label: '薪酬管理', icon: Money, color: '#67c23a' },
   { path: '/finance/accounting', label: '记账', icon: Document, color: '#e6a23c' },
   { path: '/finance/invoices', label: '发票', icon: Tickets, color: '#f56c6c' },
   { path: '/finance/tax-reports', label: '税务报表', icon: TrendCharts, color: '#909399' },
@@ -320,6 +320,14 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.stat-clickable {
+  cursor: pointer;
+}
+.stat-clickable:hover {
+  transform: translateY(-2px);
+  transition: transform 0.2s;
+}
+
 .stat-card {
   display: flex;
   align-items: center;

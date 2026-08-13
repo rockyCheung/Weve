@@ -9,9 +9,64 @@ CREATE TABLE IF NOT EXISTS employees (
     salary REAL NOT NULL DEFAULT 0,
     insurance_base REAL NOT NULL DEFAULT 0,
     housing_fund_base REAL NOT NULL DEFAULT 0,
+    grade_id INTEGER,
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (grade_id) REFERENCES position_grades(id)
+);
+
+CREATE TABLE IF NOT EXISTS position_grades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    base_salary_min REAL NOT NULL DEFAULT 0,
+    base_salary_max REAL NOT NULL DEFAULT 0,
+    performance_ratio REAL NOT NULL DEFAULT 0,
+    post_coefficient REAL NOT NULL DEFAULT 1.0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS performance_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    score REAL NOT NULL DEFAULT 0,
+    grade TEXT NOT NULL DEFAULT '',
+    coefficient REAL NOT NULL DEFAULT 1.0,
+    business_score REAL NOT NULL DEFAULT 0,
+    growth_score REAL NOT NULL DEFAULT 0,
+    attitude_score REAL NOT NULL DEFAULT 0,
+    contribution_score REAL NOT NULL DEFAULT 0,
+    reviewer TEXT NOT NULL DEFAULT '',
+    remark TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    UNIQUE(employee_id, period)
+);
+
+CREATE TABLE IF NOT EXISTS employee_bonuses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    bonus_type TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    remark TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (employee_id) REFERENCES employees(id)
+);
+
+CREATE TABLE IF NOT EXISTS performance_targets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    target_amount REAL NOT NULL DEFAULT 0,
+    achieved_amount REAL NOT NULL DEFAULT 0,
+    commission_rate REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    UNIQUE(employee_id, period)
 );
 
 CREATE TABLE IF NOT EXISTS attendance (

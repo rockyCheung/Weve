@@ -62,3 +62,17 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
 ('insurance_base_max', '35283'),
 ('housing_fund_base_min', '2420'),
 ('housing_fund_base_max', '35283');
+
+-- 绩效考评维度权重
+INSERT OR IGNORE INTO settings (key, value) VALUES
+('review_weight_business', '0.4'),
+('review_weight_growth', '0.2'),
+('review_weight_attitude', '0.2'),
+('review_weight_contribution', '0.2');
+
+-- 预置岗位等级
+INSERT OR IGNORE INTO position_grades (name, code, base_salary_min, base_salary_max, performance_ratio, post_coefficient) VALUES
+('助理', 'P1', 3000, 6000, 0.15, 0.9),
+('专员', 'P2', 5000, 10000, 0.2, 1.0),
+('主管', 'M1', 8000, 15000, 0.3, 1.2),
+('经理', 'M2', 12000, 25000, 0.35, 1.5);
