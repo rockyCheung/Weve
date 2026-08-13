@@ -4,6 +4,15 @@
       <template #header>
         <span>员工花名册</span>
         <div style="float: right;">
+          <el-select
+            v-model="statusFilter"
+            placeholder="在职状态"
+            clearable
+            style="width: 120px; margin-right: 8px;"
+          >
+            <el-option label="在职" value="active" />
+            <el-option label="离职" value="inactive" />
+          </el-select>
           <el-input
             v-model="searchKeyword"
             placeholder="搜索姓名/手机号"
@@ -19,6 +28,12 @@
         <el-table-column prop="name" label="姓名" width="100" />
         <el-table-column prop="phone" label="手机号" width="130" />
         <el-table-column prop="position" label="岗位" width="120" />
+        <el-table-column label="职级" width="100">
+          <template #default="scope">
+            <el-tag v-if="scope.row.grade_name" size="small" type="warning">{{ scope.row.grade_name }}</el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="id_card" label="身份证号" width="180" />
         <el-table-column prop="hire_date" label="入职日期" width="110" />
         <el-table-column prop="salary" label="薪资" width="110">
@@ -58,6 +73,20 @@
         </el-form-item>
         <el-form-item label="岗位">
           <el-input v-model="form.position" />
+        </el-form-item>
+        <el-form-item label="职级">
+          <el-select v-model="form.grade_id" placeholder="选择职级" clearable style="width: 100%">
+            <el-option
+              v-for="g in grades"
+              :key="g.id"
+              :label="`${g.name} (${g.code})`"
+              :value="g.id"
+            />
+          </el-select>
+          <div v-if="selectedGradeRef" class="form-tip">
+            定薪参考：¥{{ (selectedGradeRef.base_salary_min * selectedGradeRef.post_coefficient).toLocaleString() }}
+            ~ ¥{{ (selectedGradeRef.base_salary_max * selectedGradeRef.post_coefficient).toLocaleString() }}
+          </div>
         </el-form-item>
         <el-form-item label="身份证号">
           <el-input v-model="form.id_card" />
@@ -121,12 +150,27 @@ interface Employee {
   salary: number
   insurance_base: number
   housing_fund_base: number
+  grade_id: number | null
+  grade_name: string
+  grade_performance_ratio: number
   is_active: boolean
   created_at: string
   updated_at: string
 }
 
+interface PositionGrade {
+  id: number
+  name: string
+  code: string
+  base_salary_min: number
+  base_salary_max: number
+  performance_ratio: number
+  post_coefficient: number
+  is_active: boolean
+}
+
 const employees = ref<Employee[]>([])
+const grades = ref<PositionGrade[]>([])
 const loading = ref(false)
 const submitting = ref(false)
 const searchKeyword = ref('')
@@ -136,13 +180,26 @@ const isEdit = ref(false)
 const editingId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
 const importFile = ref<File | null>(null)
+const statusFilter = ref<'active' | 'inactive' | ''>('')
 
 const filteredEmployees = computed(() => {
-  if (!searchKeyword.value) return employees.value
-  const keyword = searchKeyword.value.toLowerCase()
-  return employees.value.filter(
-    e => e.name.toLowerCase().includes(keyword) || e.phone.includes(keyword)
-  )
+  let list = employees.value
+  if (statusFilter.value === 'active') {
+    list = list.filter(e => e.is_active)
+  } else if (statusFilter.value === 'inactive') {
+    list = list.filter(e => !e.is_active)
+  }
+  if (searchKeyword.value) {
+    const keyword = searchKeyword.value.toLowerCase()
+    list = list.filter(
+      e => e.name.toLowerCase().includes(keyword) || e.phone.includes(keyword)
+    )
+  }
+  return list
+})
+
+const selectedGradeRef = computed(() => {
+  return grades.value.find((g) => g.id === form.value.grade_id) || null
 })
 
 const form = ref({
@@ -154,6 +211,7 @@ const form = ref({
   salary: 0,
   insurance_base: 0,
   housing_fund_base: 0,
+  grade_id: null as number | null,
 })
 
 const rules = {
@@ -175,10 +233,18 @@ const fetchEmployees = async () => {
   }
 }
 
+const fetchGrades = async () => {
+  try {
+    grades.value = await invoke('get_position_grades')
+  } catch (e) {
+    console.error('获取岗位等级失败:', e)
+  }
+}
+
 const showAddDialog = () => {
   isEdit.value = false
   editingId.value = null
-  form.value = { name: '', phone: '', position: '', id_card: '', hire_date: '', salary: 0, insurance_base: 0, housing_fund_base: 0 }
+  form.value = { name: '', phone: '', position: '', id_card: '', hire_date: '', salary: 0, insurance_base: 0, housing_fund_base: 0, grade_id: null }
   dialogVisible.value = true
 }
 
@@ -194,6 +260,7 @@ const editEmployee = (employee: Employee) => {
     salary: employee.salary,
     insurance_base: employee.insurance_base,
     housing_fund_base: employee.housing_fund_base,
+    grade_id: employee.grade_id,
   }
   dialogVisible.value = true
 }
@@ -217,6 +284,7 @@ const submitForm = async () => {
           salary: form.value.salary,
           insurance_base: form.value.insurance_base,
           housing_fund_base: form.value.housing_fund_base,
+          grade_id: form.value.grade_id,
         },
       })
       ElMessage.success('员工信息已更新')
@@ -251,11 +319,18 @@ const toggleActive = async (employee: Employee) => {
 
 const deleteEmployee = async (id: number) => {
   try {
-    await ElMessageBox.confirm('确定要删除该员工记录吗？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm(
+      '删除将彻底清除该员工记录（仅适用于误录数据）。若员工存在考勤、绩效、奖金等历史数据将无法删除，请改用「离职」操作。确定继续吗？',
+      '删除员工',
+      { type: 'warning', confirmButtonText: '彻底删除', cancelButtonText: '取消' }
+    )
     await invoke('delete_employee', { id })
     ElMessage.success('员工已删除')
     await fetchEmployees()
-  } catch {
+  } catch (e: any) {
+    if (typeof e === 'string' && e.includes('无法物理删除')) {
+      ElMessage.warning(e)
+    }
     // 取消操作
   }
 }
@@ -281,7 +356,10 @@ const importEmployees = async () => {
   importDialogVisible.value = false
 }
 
-onMounted(fetchEmployees)
+onMounted(() => {
+  fetchEmployees()
+  fetchGrades()
+})
 </script>
 
 <style scoped>

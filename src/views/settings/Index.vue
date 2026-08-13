@@ -317,115 +317,49 @@
         </el-card>
       </el-tab-pane>
 
-      <!-- 数据管理 -->
-      <el-tab-pane label="数据管理" name="data">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-card>
-              <template #header>
-                <span>数据备份与恢复</span>
+      <!-- 岗位等级 -->
+      <el-tab-pane label="岗位等级" name="grades">
+        <el-card>
+          <template #header>
+            <span>岗位等级配置</span>
+            <el-button size="small" type="primary" style="float: right" @click="showAddGrade">添加等级</el-button>
+          </template>
+          <el-alert
+            title="定薪参考：岗位工资下限×岗位系数 ≤ 基本工资 ≤ 岗位工资上限×岗位系数"
+            type="info"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 16px"
+          />
+          <el-table :data="grades" stripe border size="small">
+            <el-table-column prop="name" label="等级名称" width="90" />
+            <el-table-column prop="code" label="编码" width="70" />
+            <el-table-column prop="base_salary_min" label="工资下限" width="100" />
+            <el-table-column prop="base_salary_max" label="工资上限" width="100" />
+            <el-table-column prop="post_coefficient" label="岗位系数" width="90" />
+            <el-table-column label="定薪参考区间" min-width="160">
+              <template #default="scope">
+                ¥{{ (scope.row.base_salary_min * scope.row.post_coefficient).toLocaleString() }}
+                ~
+                ¥{{ (scope.row.base_salary_max * scope.row.post_coefficient).toLocaleString() }}
               </template>
-              <el-alert
-                title="定期备份数据可防止意外丢失"
-                type="info"
-                :closable="false"
-                show-icon
-                style="margin-bottom: 16px"
-              />
-              <el-row :gutter="16" style="margin-bottom: 16px">
-                <el-col :span="12">
-                  <el-button
-                    type="primary"
-                    @click="backupData"
-                    :loading="backingUp"
-                    style="width: 100%"
-                    >创建备份</el-button
-                  >
-                </el-col>
-                <el-col :span="12">
-                  <el-button
-                    type="warning"
-                    @click="restoreData"
-                    style="width: 100%"
-                    >恢复备份</el-button
-                  >
-                </el-col>
-              </el-row>
-              <div v-if="backups.length > 0">
-                <h4 style="margin-bottom: 12px">历史备份列表</h4>
-                <el-table :data="backups" stripe size="small" max-height="300">
-                  <el-table-column
-                    prop="created_at"
-                    label="备份时间"
-                    width="180"
-                  />
-                  <el-table-column
-                    prop="file_size"
-                    label="文件大小"
-                    width="120"
-                  >
-                    <template #default="scope">{{
-                      formatFileSize(scope.row.file_size)
-                    }}</template>
-                  </el-table-column>
-                  <el-table-column label="操作" width="120">
-                    <template #default="scope">
-                      <el-button
-                        size="small"
-                        type="danger"
-                        @click="deleteBackup(scope.row.file_name)"
-                        >删除</el-button
-                      >
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </div>
-              <el-empty v-else description="暂无备份记录" />
-            </el-card>
-          </el-col>
-          <el-col :span="12">
-            <el-card>
-              <template #header>
-                <span>数据导出</span>
+            </el-table-column>
+            <el-table-column prop="performance_ratio" label="绩效比例" width="90" />
+            <el-table-column label="状态" width="80">
+              <template #default="scope">
+                <el-tag :type="scope.row.is_active ? 'success' : 'info'" size="small">
+                  {{ scope.row.is_active ? '启用' : '停用' }}
+                </el-tag>
               </template>
-              <el-alert
-                title="导出全部数据为 JSON 格式，可用于审计或迁移"
-                type="info"
-                :closable="false"
-                show-icon
-                style="margin-bottom: 16px"
-              />
-              <el-button
-                type="success"
-                @click="exportAllData"
-                :loading="exporting"
-                style="width: 100%"
-                >导出全部数据</el-button
-              >
-              <div style="margin-top: 16px">
-                <el-tag type="info"
-                  >导出内容包含：员工信息、考勤记录、会计科目、凭证、发票、税务报表、系统设置</el-tag
-                >
-              </div>
-            </el-card>
-            <el-card style="margin-top: 16px">
-              <template #header>
-                <span>数据库信息</span>
+            </el-table-column>
+            <el-table-column label="操作" width="140">
+              <template #default="scope">
+                <el-button size="small" @click="editGrade(scope.row)">编辑</el-button>
+                <el-button size="small" type="danger" @click="deleteGrade(scope.row.id)">删除</el-button>
               </template>
-              <el-descriptions :column="1" border>
-                <el-descriptions-item label="数据库类型"
-                  >SQLite</el-descriptions-item
-                >
-                <el-descriptions-item label="数据位置">{{
-                  dbPath
-                }}</el-descriptions-item>
-                <el-descriptions-item label="备份目录">{{
-                  backupDir
-                }}</el-descriptions-item>
-              </el-descriptions>
-            </el-card>
-          </el-col>
-        </el-row>
+            </el-table-column>
+          </el-table>
+        </el-card>
       </el-tab-pane>
 
       <!-- 关于 -->
@@ -452,28 +386,46 @@
         </el-card>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 岗位等级对话框 -->
+    <el-dialog v-model="gradeDialogVisible" :title="gradeEditId ? '编辑等级' : '添加等级'" width="420px">
+      <el-form :model="gradeForm" label-width="100px">
+        <el-form-item label="等级名称">
+          <el-input v-model="gradeForm.name" />
+        </el-form-item>
+        <el-form-item label="编码">
+          <el-input v-model="gradeForm.code" />
+        </el-form-item>
+        <el-form-item label="工资下限">
+          <el-input-number v-model="gradeForm.base_salary_min" :min="0" :precision="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="工资上限">
+          <el-input-number v-model="gradeForm.base_salary_max" :min="0" :precision="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="绩效比例">
+          <el-input-number v-model="gradeForm.performance_ratio" :min="0" :max="1" :step="0.05" :precision="2" style="width: 100%" />
+          <div class="form-tip">绩效工资 = 基本工资 × 绩效比例 × 绩效系数</div>
+        </el-form-item>
+        <el-form-item label="岗位系数">
+          <el-input-number v-model="gradeForm.post_coefficient" :min="0" :step="0.1" :precision="1" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="gradeDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitGrade">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { ElMessage, ElMessageBox } from "element-plus";
-
-interface BackupInfo {
-  file_name: string;
-  file_size: number;
-  created_at: string;
-}
+import { ElMessage } from "element-plus";
 
 const activeTab = ref("company");
 const saving = ref(false);
 const savingInsurance = ref(false);
-const backingUp = ref(false);
-const exporting = ref(false);
-const dbPath = ref("");
-const backupDir = ref("");
-const backups = ref<BackupInfo[]>([]);
 
 const companyForm = reactive({
   company_name: "",
@@ -512,10 +464,77 @@ const insuranceForm = reactive({
   housing_fund_base_max: 35283,
 });
 
-const formatFileSize = (bytes: number): string => {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+// 岗位等级管理
+interface PositionGrade {
+  id: number;
+  name: string;
+  code: string;
+  base_salary_min: number;
+  base_salary_max: number;
+  performance_ratio: number;
+  post_coefficient: number;
+  is_active: boolean;
+}
+const grades = ref<PositionGrade[]>([]);
+const gradeDialogVisible = ref(false);
+const gradeEditId = ref<number | null>(null);
+const gradeForm = reactive({
+  name: "",
+  code: "",
+  base_salary_min: 0,
+  base_salary_max: 0,
+  performance_ratio: 0,
+  post_coefficient: 1.0,
+});
+
+const fetchGrades = async () => {
+  try {
+    grades.value = await invoke("get_position_grades");
+  } catch (e) {
+    console.error("获取岗位等级失败:", e);
+  }
+};
+
+const showAddGrade = () => {
+  gradeEditId.value = null;
+  Object.assign(gradeForm, { name: "", code: "", base_salary_min: 0, base_salary_max: 0, performance_ratio: 0, post_coefficient: 1.0 });
+  gradeDialogVisible.value = true;
+};
+
+const editGrade = (g: PositionGrade) => {
+  gradeEditId.value = g.id;
+  Object.assign(gradeForm, {
+    name: g.name, code: g.code, base_salary_min: g.base_salary_min,
+    base_salary_max: g.base_salary_max, performance_ratio: g.performance_ratio,
+    post_coefficient: g.post_coefficient,
+  });
+  gradeDialogVisible.value = true;
+};
+
+const submitGrade = async () => {
+  try {
+    if (gradeEditId.value) {
+      await invoke("update_position_grade", { id: gradeEditId.value, input: gradeForm });
+      ElMessage.success("等级已更新");
+    } else {
+      await invoke("create_position_grade", { input: gradeForm });
+      ElMessage.success("等级已添加");
+    }
+    gradeDialogVisible.value = false;
+    await fetchGrades();
+  } catch (e) {
+    ElMessage.error("保存失败: " + e);
+  }
+};
+
+const deleteGrade = async (id: number) => {
+  try {
+    await invoke("delete_position_grade", { id });
+    ElMessage.success("已删除");
+    await fetchGrades();
+  } catch (e) {
+    ElMessage.error("删除失败: " + e);
+  }
 };
 
 const loadSettings = async () => {
@@ -628,80 +647,9 @@ const saveInsuranceParams = async () => {
   }
 };
 
-const backupData = async () => {
-  backingUp.value = true;
-  try {
-    const path = await invoke("backup_database");
-    ElMessage.success(`备份成功: ${path}`);
-    await loadBackups();
-  } catch (e) {
-    ElMessage.error("备份失败: " + e);
-  } finally {
-    backingUp.value = false;
-  }
-};
-
-const restoreData = async () => {
-  try {
-    await ElMessageBox.confirm(
-      "恢复备份将覆盖当前所有数据，此操作不可撤销，确定继续吗？",
-      "警告",
-      {
-        type: "warning",
-        confirmButtonText: "确定恢复",
-        cancelButtonText: "取消",
-      },
-    );
-    if (backups.value.length === 0) {
-      ElMessage.warning("没有可恢复的备份");
-      return;
-    }
-    const latestBackup = backups.value[0];
-    await invoke("restore_database", { backupPath: latestBackup.file_name });
-    ElMessage.success("数据恢复成功，请重启应用");
-  } catch (e: any) {
-    if (e !== "cancel") {
-      ElMessage.error("恢复失败: " + e);
-    }
-  }
-};
-
-const loadBackups = async () => {
-  try {
-    backups.value = await invoke("list_backups");
-  } catch (e) {
-    console.error("加载备份列表失败:", e);
-  }
-};
-
-const deleteBackup = async (fileName: string) => {
-  try {
-    await ElMessageBox.confirm("确定要删除此备份吗？", "提示");
-    await invoke("delete_backup", { fileName });
-    ElMessage.success("备份已删除");
-    await loadBackups();
-  } catch {
-    // 取消操作
-  }
-};
-
-const exportAllData = async () => {
-  exporting.value = true;
-  try {
-    const path = await invoke("export_all_data");
-    ElMessage.success(`数据已导出到: ${path}`);
-  } catch (e) {
-    ElMessage.error("导出失败: " + e);
-  } finally {
-    exporting.value = false;
-  }
-};
-
 onMounted(async () => {
   await loadSettings();
-  await loadBackups();
-  dbPath.value = "用户数据目录/small-business-manager/data.db";
-  backupDir.value = "用户数据目录/small-business-manager/backups/";
+  await fetchGrades();
 });
 </script>
 

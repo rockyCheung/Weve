@@ -18,6 +18,11 @@
         </el-breadcrumb>
       </div>
       <div class="header-right">
+        <el-button class="settings-btn" text @click="$router.push('/data')">
+          <el-icon :size="16"><Coin /></el-icon>
+          <span class="settings-label">数据管理</span>
+        </el-button>
+        <el-divider direction="vertical" />
         <el-button class="settings-btn" text @click="$router.push('/settings')">
           <el-icon :size="16"><Setting /></el-icon>
           <span class="settings-label">系统设置</span>
@@ -33,7 +38,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { HomeFilled, Setting } from "@element-plus/icons-vue";
+import { HomeFilled, Setting, Coin } from "@element-plus/icons-vue";
 import { check } from "@tauri-apps/plugin-updater";
 import { ElMessageBox } from "element-plus";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -65,13 +70,18 @@ const breadcrumbMap: Record<string, string> = {
   "/hr": "人事管理",
   "/hr/employees": "员工花名册",
   "/hr/attendance": "考勤打卡",
-  "/hr/payroll": "工资表",
+  "/payroll": "薪酬管理",
+  "/payroll/salary": "工资表",
+  "/payroll/performance": "绩效考核",
+  "/payroll/bonus": "奖金管理",
+  "/payroll/target": "业绩提成",
   "/finance": "财务管理",
   "/finance/accounting": "记账管理",
   "/finance/invoices": "发票管理",
   "/finance/tax-reports": "税务报表",
   "/finance/tax-calendar": "税务日历",
   "/settings": "系统设置",
+  "/data": "数据管理",
 };
 
 const breadcrumbs = computed(() => {

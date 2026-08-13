@@ -104,9 +104,13 @@ pub fn generate_tax_report(state: State<AppState>, input: TaxReportInput) -> Res
         _ => return Err("Unsupported report type".to_string()),
     };
 
-    // 保存到数据库
+    // 保存到数据库（保留已申报状态）
     db.execute(
-        "INSERT OR REPLACE INTO tax_reports (report_type, period, data, tax_amount, status) VALUES (?1, ?2, ?3, ?4, 'draft')",
+        "INSERT INTO tax_reports (report_type, period, data, tax_amount, status) VALUES (?1, ?2, ?3, ?4, 'draft')
+         ON CONFLICT(report_type, period) DO UPDATE SET
+            data = ?3,
+            tax_amount = ?4,
+            updated_at = datetime('now', 'localtime')",
         rusqlite::params![input.report_type, input.period, data.to_string(), tax_amount],
     ).map_err(|e| e.to_string())?;
 

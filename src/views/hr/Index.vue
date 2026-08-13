@@ -14,10 +14,6 @@
         <el-icon><Clock /></el-icon>
         <span>考勤打卡</span>
       </el-menu-item>
-      <el-menu-item index="/hr/payroll">
-        <el-icon><Money /></el-icon>
-        <span>工资表</span>
-      </el-menu-item>
     </el-menu>
     <div class="hr-content">
       <router-view />
@@ -28,7 +24,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { User, Clock, Money } from "@element-plus/icons-vue";
+import { User, Clock } from "@element-plus/icons-vue";
 
 const router = useRouter();
 const route = useRoute();
