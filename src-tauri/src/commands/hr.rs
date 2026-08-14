@@ -809,8 +809,9 @@ pub struct PerformanceReview {
     pub coefficient: f64,
     pub business_score: f64,
     pub growth_score: f64,
+    pub collaboration_score: f64,
     pub attitude_score: f64,
-    pub contribution_score: f64,
+    pub innovation_score: f64,
     pub reviewer: String,
     pub remark: String,
 }
@@ -835,8 +836,9 @@ pub struct PerformanceReviewInput {
     pub period: String,
     pub business_score: f64,
     pub growth_score: f64,
+    pub collaboration_score: f64,
     pub attitude_score: f64,
-    pub contribution_score: f64,
+    pub innovation_score: f64,
     pub reviewer: String,
     pub remark: String,
 }
@@ -855,27 +857,29 @@ pub fn save_performance_review(state: State<AppState>, input: PerformanceReviewI
             },
         ).unwrap_or(default)
     };
-    let w_business = get_weight("review_weight_business", 0.4);
+    let w_business = get_weight("review_weight_business", 0.3);
     let w_growth = get_weight("review_weight_growth", 0.2);
-    let w_attitude = get_weight("review_weight_attitude", 0.2);
-    let w_contribution = get_weight("review_weight_contribution", 0.2);
+    let w_collaboration = get_weight("review_weight_collaboration", 0.2);
+    let w_attitude = get_weight("review_weight_attitude", 0.15);
+    let w_innovation = get_weight("review_weight_innovation", 0.15);
 
     let score = input.business_score * w_business
         + input.growth_score * w_growth
+        + input.collaboration_score * w_collaboration
         + input.attitude_score * w_attitude
-        + input.contribution_score * w_contribution;
+        + input.innovation_score * w_innovation;
     let (grade, coefficient) = score_to_grade(score);
 
     db.execute(
-        "INSERT INTO performance_reviews (employee_id, period, score, grade, coefficient, business_score, growth_score, attitude_score, contribution_score, reviewer, remark)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        "INSERT INTO performance_reviews (employee_id, period, score, grade, coefficient, business_score, growth_score, collaboration_score, attitude_score, innovation_score, reviewer, remark)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
          ON CONFLICT(employee_id, period) DO UPDATE SET
             score = ?3, grade = ?4, coefficient = ?5,
-            business_score = ?6, growth_score = ?7, attitude_score = ?8, contribution_score = ?9,
-            reviewer = ?10, remark = ?11",
+            business_score = ?6, growth_score = ?7, collaboration_score = ?8, attitude_score = ?9, innovation_score = ?10,
+            reviewer = ?11, remark = ?12",
         rusqlite::params![
             input.employee_id, input.period, score, grade, coefficient,
-            input.business_score, input.growth_score, input.attitude_score, input.contribution_score,
+            input.business_score, input.growth_score, input.collaboration_score, input.attitude_score, input.innovation_score,
             input.reviewer, input.remark
         ],
     ).map_err(|e| e.to_string())?;
@@ -887,7 +891,7 @@ pub fn get_performance_reviews(state: State<AppState>, period: String) -> Result
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = db.prepare(
         "SELECT pr.id, pr.employee_id, e.name, pr.period, pr.score, pr.grade, pr.coefficient,
-                pr.business_score, pr.growth_score, pr.attitude_score, pr.contribution_score,
+                pr.business_score, pr.growth_score, pr.collaboration_score, pr.attitude_score, pr.innovation_score,
                 pr.reviewer, pr.remark
          FROM performance_reviews pr
          JOIN employees e ON pr.employee_id = e.id
@@ -905,10 +909,11 @@ pub fn get_performance_reviews(state: State<AppState>, period: String) -> Result
             coefficient: row.get(6)?,
             business_score: row.get(7)?,
             growth_score: row.get(8)?,
-            attitude_score: row.get(9)?,
-            contribution_score: row.get(10)?,
-            reviewer: row.get(11)?,
-            remark: row.get(12)?,
+            collaboration_score: row.get(9)?,
+            attitude_score: row.get(10)?,
+            innovation_score: row.get(11)?,
+            reviewer: row.get(12)?,
+            remark: row.get(13)?,
         })
     }).map_err(|e| e.to_string())?
     .filter_map(|r| r.ok())

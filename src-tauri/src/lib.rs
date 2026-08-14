@@ -55,6 +55,8 @@ pub fn run() {
             commands::accounting::delete_voucher,
             commands::accounting::trial_balance,
             commands::accounting::import_bank_statement,
+            commands::accounting::save_voucher_attachment,
+            commands::accounting::get_attachment_full_path,
             // 发票命令
             commands::invoice::add_invoice,
             commands::invoice::query_invoices,

@@ -20,6 +20,24 @@
                 <el-form-item label="摘要">
                   <el-input v-model="voucherForm.summary" />
                 </el-form-item>
+                <el-form-item label="附件">
+                  <div style="width: 100%">
+                    <el-button size="small" @click="selectAttachments">
+                      <el-icon style="margin-right: 4px"><Paperclip /></el-icon>
+                      添加附件
+                    </el-button>
+                    <el-tag
+                      v-for="(att, idx) in voucherAttachments"
+                      :key="idx"
+                      closable
+                      size="small"
+                      style="margin-left: 8px"
+                      @close="removeAttachment(idx)"
+                    >
+                      {{ att.originalName }}
+                    </el-tag>
+                  </div>
+                </el-form-item>
                 <el-form-item label="分录">
                   <div
                     v-for="(entry, index) in voucherForm.entries"
@@ -438,6 +456,20 @@
         </el-table-column>
         <el-table-column prop="summary" label="摘要" />
       </el-table>
+
+      <div v-if="currentVoucherAttachments.length > 0" style="margin-top: 16px">
+        <h4 style="margin-bottom: 8px">附件</h4>
+        <el-tag
+          v-for="(att, idx) in currentVoucherAttachments"
+          :key="idx"
+          type="info"
+          style="margin-right: 8px; cursor: pointer"
+          @click="openAttachment(att)"
+        >
+          <el-icon style="margin-right: 2px"><Document /></el-icon>
+          {{ att }}
+        </el-tag>
+      </div>
     </el-dialog>
 
     <!-- 薪资凭证生成结果 -->
@@ -487,7 +519,9 @@
 import { ref, computed, onMounted, reactive } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { UploadFilled } from "@element-plus/icons-vue";
+import { UploadFilled, Paperclip, Document } from "@element-plus/icons-vue";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openPath } from "@tauri-apps/plugin-shell";
 import type { UploadFile } from "element-plus";
 import dayjs from "dayjs";
 
@@ -576,6 +610,19 @@ const voucherQuery = ref({
 const voucherList = ref<VoucherDetail[]>([]);
 const voucherDetailVisible = ref(false);
 const currentVoucher = ref<VoucherDetail | null>(null);
+
+// 附件管理
+const voucherAttachments = ref<{ fileName: string; originalName: string }[]>([]);
+const currentVoucherAttachments = computed(() => {
+  const att = currentVoucher.value?.attachment;
+  if (!att) return [];
+  try {
+    const arr = JSON.parse(att);
+    return Array.isArray(arr) ? arr.map((f) => f.split("_").slice(1).join("_")) : [];
+  } catch {
+    return [];
+  }
+});
 
 // 薪资凭证生成
 const payrollVoucherPeriod = ref(dayjs().format("YYYY-MM"));
@@ -784,6 +831,43 @@ const removeEntry = (index: number) => {
   voucherForm.entries.splice(index, 1);
 };
 
+const selectAttachments = async () => {
+  try {
+    const selected = await openDialog({
+      multiple: true,
+      filters: [{ name: "文件", extensions: ["pdf", "png", "jpg", "jpeg", "xlsx", "xls", "doc", "docx", "csv"] }],
+    });
+    if (!selected) return;
+    const paths = Array.isArray(selected) ? selected : [selected];
+    for (const p of paths) {
+      const fileName = await invoke("save_voucher_attachment", { sourcePath: p }) as string;
+      const originalName = (p as string).split(/[\\/]/).pop() || fileName;
+      voucherAttachments.value.push({ fileName, originalName });
+    }
+    ElMessage.success(`已添加 ${paths.length} 个附件`);
+  } catch (e) {
+    ElMessage.error("添加附件失败: " + e);
+  }
+};
+
+const removeAttachment = (index: number) => {
+  voucherAttachments.value.splice(index, 1);
+};
+
+const openAttachment = async (displayName: string) => {
+  try {
+    // 从当前凭证附件中找回完整文件名
+    const att = currentVoucher.value?.attachment;
+    if (!att) return;
+    const arr = JSON.parse(att) as string[];
+    const fullName = arr.find((f) => f.endsWith(displayName)) || arr[0];
+    const path = await invoke("get_attachment_full_path", { fileName: fullName }) as string;
+    await openPath(path);
+  } catch (e) {
+    ElMessage.error("打开附件失败: " + e);
+  }
+};
+
 const submitVoucher = async () => {
   if (!voucherForm.date) {
     ElMessage.warning("请选择日期");
@@ -801,13 +885,19 @@ const submitVoucher = async () => {
     }
   }
   try {
-    const voucherNo = await invoke("post_voucher", { input: voucherForm });
+    const attachment = voucherAttachments.value.length > 0
+      ? JSON.stringify(voucherAttachments.value.map((a) => a.fileName))
+      : null;
+    const voucherNo = await invoke("post_voucher", {
+      input: { ...voucherForm, attachment },
+    });
     ElMessage.success(`凭证已提交，编号: ${voucherNo}`);
     voucherForm.entries = [
       { account_id: null, debit_amount: 0, credit_amount: 0, summary: "" },
       { account_id: null, debit_amount: 0, credit_amount: 0, summary: "" },
     ];
     voucherForm.summary = "";
+    voucherAttachments.value = [];
     await fetchVouchers();
   } catch (e) {
     ElMessage.error("提交失败: " + e);

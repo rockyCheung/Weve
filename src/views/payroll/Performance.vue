@@ -5,7 +5,7 @@
         <span>绩效考核</span>
       </template>
       <el-alert
-        title="仅显示绩效比例大于 0 的员工；绩效比例为 0 的岗位无需绩效考核。总分 = 业绩×40% + 成长×20% + 态度×20% + 贡献×20%"
+        title="仅显示绩效比例大于 0 的员工；绩效比例为 0 的岗位无需绩效考核。总分 = 工作业绩与产出×30% + 专业能力与成长力×20% + 沟通协作与团队影响×20% + 工作态度与职业素养×15% + 创新与战略前瞻×15%"
         type="info"
         :closable="false"
         show-icon
@@ -21,25 +21,30 @@
       </el-form>
 
       <el-table :data="rows" stripe border size="small" style="margin-top: 16px">
-        <el-table-column prop="employee_name" label="姓名" width="100" fixed />
-        <el-table-column label="业绩(40%)" width="170">
+        <el-table-column prop="employee_name" label="姓名" width="90" fixed />
+        <el-table-column label="业绩产出(30%)" width="160">
           <template #default="scope">
             <el-slider v-model="scope.row.business_score" :min="0" :max="100" :step="1" />
           </template>
         </el-table-column>
-        <el-table-column label="成长(20%)" width="170">
+        <el-table-column label="能力成长(20%)" width="160">
           <template #default="scope">
             <el-slider v-model="scope.row.growth_score" :min="0" :max="100" :step="1" />
           </template>
         </el-table-column>
-        <el-table-column label="态度(20%)" width="170">
+        <el-table-column label="协作影响(20%)" width="160">
+          <template #default="scope">
+            <el-slider v-model="scope.row.collaboration_score" :min="0" :max="100" :step="1" />
+          </template>
+        </el-table-column>
+        <el-table-column label="态度素养(15%)" width="160">
           <template #default="scope">
             <el-slider v-model="scope.row.attitude_score" :min="0" :max="100" :step="1" />
           </template>
         </el-table-column>
-        <el-table-column label="贡献(20%)" width="170">
+        <el-table-column label="创新前瞻(15%)" width="160">
           <template #default="scope">
-            <el-slider v-model="scope.row.contribution_score" :min="0" :max="100" :step="1" />
+            <el-slider v-model="scope.row.innovation_score" :min="0" :max="100" :step="1" />
           </template>
         </el-table-column>
         <el-table-column label="总分" width="70">
@@ -53,7 +58,7 @@
         <el-table-column label="系数" width="70">
           <template #default="scope">{{ coeffOfScore(totalOf(scope.row)) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="90" fixed="right">
+        <el-table-column label="操作" width="80" fixed="right">
           <template #default="scope">
             <el-button size="small" type="primary" @click="save(scope.row)">保存</el-button>
           </template>
@@ -75,24 +80,23 @@ interface Row {
   employee_name: string;
   business_score: number;
   growth_score: number;
+  collaboration_score: number;
   attitude_score: number;
-  contribution_score: number;
-  score: number;
-  grade: string;
-  coefficient: number;
+  innovation_score: number;
 }
 
 const period = ref(dayjs().format("YYYY-MM"));
 const loading = ref(false);
 const rows = ref<Row[]>([]);
 
-const WEIGHTS = { business: 0.4, growth: 0.2, attitude: 0.2, contribution: 0.2 };
+const WEIGHTS = { business: 0.3, growth: 0.2, collaboration: 0.2, attitude: 0.15, innovation: 0.15 };
 
 const totalOf = (r: Row) =>
   r.business_score * WEIGHTS.business +
   r.growth_score * WEIGHTS.growth +
+  r.collaboration_score * WEIGHTS.collaboration +
   r.attitude_score * WEIGHTS.attitude +
-  r.contribution_score * WEIGHTS.contribution;
+  r.innovation_score * WEIGHTS.innovation;
 
 const gradeOf = (score: number): { grade: string; coefficient: number } => {
   if (score >= 95) return { grade: "S", coefficient: 1.2 };
@@ -125,22 +129,14 @@ const fetchAll = async () => {
       .filter((e) => e.is_active && e.grade_performance_ratio > 0)
       .map((e) => {
         const r = reviewMap[e.id];
-        const business = r?.business_score ?? 0;
-        const growth = r?.growth_score ?? 0;
-        const attitude = r?.attitude_score ?? 0;
-        const contribution = r?.contribution_score ?? 0;
-        const score = business * WEIGHTS.business + growth * WEIGHTS.growth + attitude * WEIGHTS.attitude + contribution * WEIGHTS.contribution;
-        const g = r ? { grade: r.grade, coefficient: r.coefficient } : gradeOf(score);
         return {
           employee_id: e.id,
           employee_name: e.name,
-          business_score: business,
-          growth_score: growth,
-          attitude_score: attitude,
-          contribution_score: contribution,
-          score,
-          grade: g.grade,
-          coefficient: g.coefficient,
+          business_score: r?.business_score ?? 0,
+          growth_score: r?.growth_score ?? 0,
+          collaboration_score: r?.collaboration_score ?? 0,
+          attitude_score: r?.attitude_score ?? 0,
+          innovation_score: r?.innovation_score ?? 0,
         };
       });
   } catch (e) {
@@ -158,8 +154,9 @@ const save = async (row: Row) => {
         period: period.value,
         business_score: row.business_score,
         growth_score: row.growth_score,
+        collaboration_score: row.collaboration_score,
         attitude_score: row.attitude_score,
-        contribution_score: row.contribution_score,
+        innovation_score: row.innovation_score,
         reviewer: "",
         remark: "",
       },
