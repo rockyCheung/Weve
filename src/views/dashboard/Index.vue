@@ -60,7 +60,7 @@
     <!-- 税务提醒卡片 -->
     <el-row :gutter="20" style="margin-bottom: 20px;">
       <el-col :span="8">
-        <el-card shadow="hover" @click="$router.push('/finance/tax-reports')" style="cursor: pointer;">
+        <el-card shadow="hover" @click="$router.push('/tax-reports')" style="cursor: pointer;">
           <div class="reminder-card">
             <div class="reminder-count" style="color: #e6a23c;">{{ stats.pending_tax_reports }}</div>
             <div class="reminder-label">待申报税务报表</div>
@@ -68,7 +68,7 @@
         </el-card>
       </el-col>
       <el-col :span="8">
-        <el-card shadow="hover" @click="$router.push('/finance/tax-calendar')" style="cursor: pointer;">
+        <el-card shadow="hover" @click="$router.push('/tax-calendar')" style="cursor: pointer;">
           <div class="reminder-card">
             <div class="reminder-count" style="color: #f56c6c;">{{ stats.overdue_tax_items }}</div>
             <div class="reminder-label">已逾期税务事项</div>
@@ -76,7 +76,7 @@
         </el-card>
       </el-col>
       <el-col :span="8">
-        <el-card shadow="hover" @click="$router.push('/finance/tax-calendar')" style="cursor: pointer;">
+        <el-card shadow="hover" @click="$router.push('/tax-calendar')" style="cursor: pointer;">
           <div class="reminder-card">
             <div class="reminder-count" style="color: #409eff;">{{ stats.upcoming_deadlines }}</div>
             <div class="reminder-label">即将到期（7天内）</div>
@@ -209,10 +209,10 @@ const chartOption = ref({})
 const quickLinks = [
   { path: '/hr/employees', label: '员工管理', icon: User, color: '#409eff' },
   { path: '/payroll/salary', label: '薪酬管理', icon: Money, color: '#67c23a' },
-  { path: '/finance/accounting', label: '记账', icon: Document, color: '#e6a23c' },
-  { path: '/finance/invoices', label: '发票', icon: Tickets, color: '#f56c6c' },
-  { path: '/finance/tax-reports', label: '税务报表', icon: TrendCharts, color: '#909399' },
-  { path: '/finance/tax-calendar', label: '税务日历', icon: Calendar, color: '#409eff' },
+  { path: '/accounting', label: '记账', icon: Document, color: '#e6a23c' },
+  { path: '/invoices', label: '发票', icon: Tickets, color: '#f56c6c' },
+  { path: '/tax-reports', label: '税务报表', icon: TrendCharts, color: '#909399' },
+  { path: '/tax-calendar', label: '税务日历', icon: Calendar, color: '#409eff' },
 ]
 
 // ==================== 方法 ====================
