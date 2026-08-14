@@ -173,6 +173,7 @@ onMounted(fetchAll);
 
 <style scoped>
 .score-slider {
-  margin: 0 10px;
+  box-sizing: border-box;
+  padding: 0 20px;
 }
 </style>

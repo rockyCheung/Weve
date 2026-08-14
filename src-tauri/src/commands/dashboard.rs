@@ -304,6 +304,30 @@ pub fn get_recent_activities(state: State<AppState>) -> Result<Vec<RecentActivit
         }
     }
 
+    // 添加自定义税务事项（逾期或60天内到期）
+    for y in [today.year(), today.year() + 1] {
+        for item in load_custom_calendar_items(&db, y).unwrap_or_default() {
+            if item.status == "submitted" || item.days_remaining > 60 {
+                continue;
+            }
+            let urgency = if item.days_remaining < 0 {
+                "overdue"
+            } else if item.days_remaining <= 7 {
+                "urgent"
+            } else {
+                "normal"
+            };
+            activities.push(RecentActivity {
+                id: activities.len() as i64 + 1,
+                activity_type: "tax_due".to_string(),
+                title: format!("{}申报截止（{}）", item.tax_type_label, item.period_label),
+                description: format!("截止日期: {}, 剩余{}天", item.due_date, item.days_remaining.max(0)),
+                date: item.due_date,
+                urgency: urgency.to_string(),
+            });
+        }
+    }
+
     // 按日期排序
     activities.sort_by(|a, b| a.date.cmp(&b.date));
     

@@ -39,10 +39,6 @@
             <span>税务日历</span>
           </el-menu-item>
         </el-menu>
-        <template v-if="currentLabel">
-          <el-divider direction="vertical" />
-          <span class="current-label">{{ currentLabel }}</span>
-        </template>
       </div>
       <div class="header-right">
         <el-button class="settings-btn" text @click="$router.push('/data')">
@@ -93,24 +89,11 @@ onMounted(async () => {
   }
 });
 
-const labelMap: Record<string, string> = {
-  "/hr/employees": "员工花名册",
-  "/hr/attendance": "考勤打卡",
-  "/payroll/salary": "工资表",
-  "/payroll/performance": "绩效考核",
-  "/payroll/bonus": "奖金管理",
-  "/payroll/target": "业绩提成",
-};
-
 const activeMenu = computed(() => {
   const parts = route.path.split("/").filter(Boolean);
   if (parts.length === 0) return "/";
   if (parts[0] === "hr" || parts[0] === "payroll") return "/" + parts[0];
   return route.path;
-});
-
-const currentLabel = computed(() => {
-  return labelMap[route.path] || "";
 });
 
 const handleSelect = (index: string) => {
@@ -159,12 +142,6 @@ const handleSelect = (index: string) => {
 
 .home-label {
   margin-left: 4px;
-}
-
-.current-label {
-  font-size: 13px;
-  color: #909399;
-  white-space: nowrap;
 }
 
 .header-right {
