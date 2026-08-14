@@ -7,15 +7,24 @@
           <span class="home-label">首页</span>
         </el-button>
         <el-divider direction="vertical" />
-        <el-breadcrumb separator=">">
-          <el-breadcrumb-item
-            v-for="item in breadcrumbs"
-            :key="item.path"
-            :to="item.path"
-          >
-            {{ item.label }}
-          </el-breadcrumb-item>
-        </el-breadcrumb>
+        <el-menu
+          mode="horizontal"
+          :default-active="activeMenu"
+          :ellipsis="false"
+          @select="handleSelect"
+          class="global-nav"
+        >
+          <el-menu-item index="/hr">人事管理</el-menu-item>
+          <el-menu-item index="/payroll">薪酬管理</el-menu-item>
+          <el-menu-item index="/accounting">记账管理</el-menu-item>
+          <el-menu-item index="/invoices">发票管理</el-menu-item>
+          <el-menu-item index="/tax-reports">税务报表</el-menu-item>
+          <el-menu-item index="/tax-calendar">税务日历</el-menu-item>
+        </el-menu>
+        <template v-if="currentLabel">
+          <el-divider direction="vertical" />
+          <span class="current-label">{{ currentLabel }}</span>
+        </template>
       </div>
       <div class="header-right">
         <el-button class="settings-btn" text @click="$router.push('/data')">
@@ -37,13 +46,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { HomeFilled, Setting, Coin } from "@element-plus/icons-vue";
 import { check } from "@tauri-apps/plugin-updater";
 import { ElMessageBox } from "element-plus";
 import { relaunch } from "@tauri-apps/plugin-process";
 
 const route = useRoute();
+const router = useRouter();
 
 const updateAvailable = ref(false);
 
@@ -65,40 +75,29 @@ onMounted(async () => {
   }
 });
 
-const breadcrumbMap: Record<string, string> = {
-  "/": "首页",
-  "/hr": "人事管理",
+const labelMap: Record<string, string> = {
   "/hr/employees": "员工花名册",
   "/hr/attendance": "考勤打卡",
-  "/payroll": "薪酬管理",
   "/payroll/salary": "工资表",
   "/payroll/performance": "绩效考核",
   "/payroll/bonus": "奖金管理",
   "/payroll/target": "业绩提成",
-  "/finance": "财务管理",
-  "/finance/accounting": "记账管理",
-  "/finance/invoices": "发票管理",
-  "/finance/tax-reports": "税务报表",
-  "/finance/tax-calendar": "税务日历",
-  "/settings": "系统设置",
-  "/data": "数据管理",
 };
 
-const breadcrumbs = computed(() => {
+const activeMenu = computed(() => {
   const parts = route.path.split("/").filter(Boolean);
-  const crumbs: { path: string; label: string }[] = [];
-
-  let accumulated = "";
-  for (const part of parts) {
-    accumulated += "/" + part;
-    const label = breadcrumbMap[accumulated];
-    if (label) {
-      crumbs.push({ path: accumulated, label });
-    }
-  }
-
-  return crumbs;
+  if (parts.length === 0) return "/";
+  if (parts[0] === "hr" || parts[0] === "payroll") return "/" + parts[0];
+  return route.path;
 });
+
+const currentLabel = computed(() => {
+  return labelMap[route.path] || "";
+});
+
+const handleSelect = (index: string) => {
+  router.push(index);
+};
 </script>
 
 <style scoped>
@@ -113,7 +112,7 @@ const breadcrumbs = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 48px;
+  height: 56px;
   padding: 0 20px;
   background: #fff;
   border-bottom: 1px solid #e4e7ed;
@@ -124,6 +123,10 @@ const breadcrumbs = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.global-nav {
+  border-bottom: none;
 }
 
 .home-btn {
@@ -138,6 +141,12 @@ const breadcrumbs = computed(() => {
 
 .home-label {
   margin-left: 4px;
+}
+
+.current-label {
+  font-size: 13px;
+  color: #909399;
+  white-space: nowrap;
 }
 
 .header-right {

@@ -24,27 +24,27 @@
         <el-table-column prop="employee_name" label="姓名" width="90" fixed />
         <el-table-column label="业绩产出(30%)" width="160">
           <template #default="scope">
-            <el-slider v-model="scope.row.business_score" :min="0" :max="100" :step="1" />
+            <el-slider v-model="scope.row.business_score" :min="0" :max="100" :step="1" class="score-slider" />
           </template>
         </el-table-column>
         <el-table-column label="能力成长(20%)" width="160">
           <template #default="scope">
-            <el-slider v-model="scope.row.growth_score" :min="0" :max="100" :step="1" />
+            <el-slider v-model="scope.row.growth_score" :min="0" :max="100" :step="1" class="score-slider" />
           </template>
         </el-table-column>
         <el-table-column label="协作影响(20%)" width="160">
           <template #default="scope">
-            <el-slider v-model="scope.row.collaboration_score" :min="0" :max="100" :step="1" />
+            <el-slider v-model="scope.row.collaboration_score" :min="0" :max="100" :step="1" class="score-slider" />
           </template>
         </el-table-column>
         <el-table-column label="态度素养(15%)" width="160">
           <template #default="scope">
-            <el-slider v-model="scope.row.attitude_score" :min="0" :max="100" :step="1" />
+            <el-slider v-model="scope.row.attitude_score" :min="0" :max="100" :step="1" class="score-slider" />
           </template>
         </el-table-column>
         <el-table-column label="创新前瞻(15%)" width="160">
           <template #default="scope">
-            <el-slider v-model="scope.row.innovation_score" :min="0" :max="100" :step="1" />
+            <el-slider v-model="scope.row.innovation_score" :min="0" :max="100" :step="1" class="score-slider" />
           </template>
         </el-table-column>
         <el-table-column label="总分" width="70">
@@ -170,3 +170,9 @@ const save = async (row: Row) => {
 
 onMounted(fetchAll);
 </script>
+
+<style scoped>
+.score-slider {
+  margin: 0 10px;
+}
+</style>

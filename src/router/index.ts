@@ -15,6 +15,7 @@ const routes: RouteRecordRaw[] = [
         path: "hr",
         name: "HR",
         component: () => import("@/views/hr/Index.vue"),
+        redirect: "/hr/employees",
         children: [
           {
             path: "employees",
@@ -57,31 +58,24 @@ const routes: RouteRecordRaw[] = [
         ],
       },
       {
-        path: "finance",
-        name: "Finance",
-        component: () => import("@/views/finance/Index.vue"),
-        children: [
-          {
-            path: "accounting",
-            name: "Accounting",
-            component: () => import("@/views/finance/Accounting.vue"),
-          },
-          {
-            path: "invoices",
-            name: "Invoices",
-            component: () => import("@/views/finance/Invoices.vue"),
-          },
-          {
-            path: "tax-reports",
-            name: "TaxReports",
-            component: () => import("@/views/finance/TaxReports.vue"),
-          },
-          {
-            path: "tax-calendar",
-            name: "TaxCalendar",
-            component: () => import("@/views/finance/TaxCalendar.vue"),
-          },
-        ],
+        path: "accounting",
+        name: "Accounting",
+        component: () => import("@/views/finance/Accounting.vue"),
+      },
+      {
+        path: "invoices",
+        name: "Invoices",
+        component: () => import("@/views/finance/Invoices.vue"),
+      },
+      {
+        path: "tax-reports",
+        name: "TaxReports",
+        component: () => import("@/views/finance/TaxReports.vue"),
+      },
+      {
+        path: "tax-calendar",
+        name: "TaxCalendar",
+        component: () => import("@/views/finance/TaxCalendar.vue"),
       },
       {
         path: "settings",
