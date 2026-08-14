@@ -27,6 +27,9 @@
     }
   },
   "plugins": {
+    "shell": {
+      "open": ".*"
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVBRkI4NEIzRjM3QzE2RDgKUldUWUZuenpzNFQ3V25CckN1aTRlTnBnOU5JR3RpcXVKTkw2K3R3bDNhUHRBSlA2MjRCUllOUW4K",
       "endpoints": [

@@ -65,10 +65,11 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
 
 -- 绩效考评维度权重
 INSERT OR IGNORE INTO settings (key, value) VALUES
-('review_weight_business', '0.4'),
+('review_weight_business', '0.3'),
 ('review_weight_growth', '0.2'),
-('review_weight_attitude', '0.2'),
-('review_weight_contribution', '0.2');
+('review_weight_collaboration', '0.2'),
+('review_weight_attitude', '0.15'),
+('review_weight_innovation', '0.15');
 
 -- 预置岗位等级
 INSERT OR IGNORE INTO position_grades (name, code, base_salary_min, base_salary_max, performance_ratio, post_coefficient) VALUES

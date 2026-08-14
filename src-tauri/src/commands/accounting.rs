@@ -2,6 +2,7 @@ use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 // ==================== 科目管理 ====================
 
@@ -411,4 +412,40 @@ pub fn import_bank_statement(state: State<AppState>, transactions: Vec<BankTrans
     }
     
     Ok(count)
+}
+
+// ==================== 凭证附件管理 ====================
+
+fn get_attachments_dir() -> PathBuf {
+    let mut path = dirs_next::data_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push("small-business-manager");
+    path.push("attachments");
+    std::fs::create_dir_all(&path).ok();
+    path
+}
+
+/// 保存附件文件到数据目录，返回存储的文件名
+#[tauri::command]
+pub fn save_voucher_attachment(source_path: String) -> Result<String, String> {
+    let src = PathBuf::from(&source_path);
+    let file_name = src.file_name()
+        .ok_or("无效文件路径")?
+        .to_string_lossy()
+        .to_string();
+    let timestamp = chrono::Local::now().format("%Y%m%d%H%M%S%f");
+    let unique_name = format!("{}_{}", timestamp, file_name);
+    let dest = get_attachments_dir().join(&unique_name);
+    std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+    Ok(unique_name)
+}
+
+/// 获取附件的完整绝对路径（用于打开/预览）
+#[tauri::command]
+pub fn get_attachment_full_path(file_name: String) -> Result<String, String> {
+    let path = get_attachments_dir().join(&file_name);
+    if path.exists() {
+        Ok(path.to_string_lossy().to_string())
+    } else {
+        Err("附件文件不存在".to_string())
+    }
 }

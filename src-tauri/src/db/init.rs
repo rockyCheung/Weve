@@ -123,7 +123,7 @@ fn migrate_old_schema(conn: &Connection) -> Result<()> {
 
     // 为绩效考核表添加多维评价字段
     if table_exists(conn, "performance_reviews") {
-        for col in ["business_score", "growth_score", "attitude_score", "contribution_score"] {
+        for col in ["business_score", "growth_score", "collaboration_score", "attitude_score", "innovation_score"] {
             if !column_exists(conn, "performance_reviews", col) {
                 conn.execute_batch(&format!("ALTER TABLE performance_reviews ADD COLUMN {} REAL NOT NULL DEFAULT 0", col))?;
             }
