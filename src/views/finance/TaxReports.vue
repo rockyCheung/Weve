@@ -1,66 +1,12 @@
 <template>
   <div>
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
-      <!-- 增值税月报 -->
-      <el-tab-pane label="增值税月报" name="vat">
-        <el-card>
-          <template #header>
-            <span>增值税月报</span>
-            <el-button size="small" type="primary" style="float: right;" @click="exportReport('vat_monthly')" :disabled="!vatReport">
-              导出Excel
-            </el-button>
-          </template>
-          <el-form :inline="true" :model="periodForm">
-            <el-form-item label="所属月份">
-              <el-date-picker v-model="periodForm.vatPeriod" type="month" value-format="YYYY-MM" placeholder="选择月份" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="generateReport('vat_monthly')" :loading="loading.vat">生成报表</el-button>
-            </el-form-item>
-          </el-form>
-          <div v-if="vatReport" style="margin-top: 16px;">
-            <el-descriptions :column="2" border>
-              <el-descriptions-item label="所属期">{{ vatReport.period }}</el-descriptions-item>
-              <el-descriptions-item label="销项发票数">{{ vatReport.output_count }} 张</el-descriptions-item>
-              <el-descriptions-item label="销项金额">¥{{ vatReport.output_amount.toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="进项发票数">{{ vatReport.input_count }} 张</el-descriptions-item>
-              <el-descriptions-item label="进项金额">¥{{ vatReport.input_amount.toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="销项税额">¥{{ vatReport.output_tax.toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="进项税额">¥{{ vatReport.input_tax.toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="应缴增值税">¥{{ vatReport.tax_due.toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="城建税(7%)">¥{{ vatReport.surcharge_city.toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="教育费附加(3%)">¥{{ vatReport.surcharge_education.toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="地方教育附加(2%)">¥{{ vatReport.surcharge_local.toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="合计应缴">
-                <el-tag type="danger" size="large">¥{{ vatReport.total_tax_due.toFixed(2) }}</el-tag>
-              </el-descriptions-item>
-            </el-descriptions>
-
-            <!-- 按税率明细 -->
-            <el-table :data="vatReport.items" stripe style="margin-top: 16px;" border size="small">
-              <el-table-column label="税率" width="100">
-                <template #default="scope">{{ (scope.row.tax_rate * 100).toFixed(0) }}%</template>
-              </el-table-column>
-              <el-table-column prop="output_amount" label="销项金额" width="150">
-                <template #default="scope">¥{{ scope.row.output_amount.toFixed(2) }}</template>
-              </el-table-column>
-              <el-table-column prop="output_tax" label="销项税额" width="150">
-                <template #default="scope">¥{{ scope.row.output_tax.toFixed(2) }}</template>
-              </el-table-column>
-              <el-table-column prop="input_amount" label="进项金额" width="150">
-                <template #default="scope">¥{{ scope.row.input_amount.toFixed(2) }}</template>
-              </el-table-column>
-              <el-table-column prop="input_tax" label="进项税额" width="150">
-                <template #default="scope">¥{{ scope.row.input_tax.toFixed(2) }}</template>
-              </el-table-column>
-            </el-table>
-          </div>
-          <el-empty v-else description="请选择月份并生成增值税月报" />
-        </el-card>
-      </el-tab-pane>
-
       <!-- 企业所得税季报 -->
-      <el-tab-pane label="企业所得税季报" name="cit">
+      <el-tab-pane name="cit">
+        <template #label>
+          <el-icon><PieChart /></el-icon>
+          <span>企业所得税季报</span>
+        </template>
         <el-card>
           <template #header>
             <span>企业所得税季报</span>
@@ -70,7 +16,9 @@
           </template>
           <el-form :inline="true" :model="periodForm">
             <el-form-item label="所属季度">
-              <el-date-picker v-model="periodForm.citPeriod" type="month" value-format="YYYY-MM" placeholder="选择季度末月" />
+              <el-select v-model="periodForm.citPeriod" style="width: 170px">
+                <el-option v-for="q in quarters" :key="q.value" :label="q.label" :value="q.value" />
+              </el-select>
             </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="generateReport('cit_quarterly')" :loading="loading.cit">生成报表</el-button>
@@ -87,7 +35,7 @@
               style="margin-bottom: 16px;"
             />
             <el-descriptions :column="2" border>
-              <el-descriptions-item label="所属期">{{ citReport.period }}</el-descriptions-item>
+              <el-descriptions-item label="所属期">{{ formatCitPeriod(citReport.period) }}</el-descriptions-item>
               <el-descriptions-item label="营业收入">¥{{ citReport.revenue.toFixed(2) }}</el-descriptions-item>
               <el-descriptions-item label="营业成本">¥{{ citReport.cost.toFixed(2) }}</el-descriptions-item>
               <el-descriptions-item label="毛利">¥{{ citReport.gross_profit.toFixed(2) }}</el-descriptions-item>
@@ -104,7 +52,11 @@
       </el-tab-pane>
 
       <!-- 个人所得税 -->
-      <el-tab-pane label="个人所得税" name="pit">
+      <el-tab-pane name="pit">
+        <template #label>
+          <el-icon><User /></el-icon>
+          <span>个人所得税</span>
+        </template>
         <el-card>
           <template #header>
             <span>个人所得税代扣代缴汇总</span>
@@ -156,7 +108,11 @@
       </el-tab-pane>
 
       <!-- 财务报表 -->
-      <el-tab-pane label="财务报表" name="financial">
+      <el-tab-pane name="financial">
+        <template #label>
+          <el-icon><DataAnalysis /></el-icon>
+          <span>财务报表</span>
+        </template>
         <el-card>
           <template #header>
             <span>财务报表</span>
@@ -224,7 +180,11 @@
           </el-form>
 
           <el-tabs v-model="financialSubTab">
-            <el-tab-pane label="利润表" name="income">
+            <el-tab-pane name="income">
+              <template #label>
+                <el-icon><TrendCharts /></el-icon>
+                <span>利润表</span>
+              </template>
               <div v-if="incomeStatement">
                 <el-descriptions :column="2" border>
                   <el-descriptions-item label="营业收入">¥{{ incomeStatement.revenue.toFixed(2) }}</el-descriptions-item>
@@ -248,7 +208,11 @@
               <el-empty v-else description="请生成利润表" />
             </el-tab-pane>
 
-            <el-tab-pane label="资产负债表" name="balance">
+            <el-tab-pane name="balance">
+              <template #label>
+                <el-icon><ScaleToOriginal /></el-icon>
+                <span>资产负债表</span>
+              </template>
               <div v-if="balanceSheet">
                 <el-row :gutter="16">
                   <el-col :span="12">
@@ -286,7 +250,11 @@
               <el-empty v-else description="请生成资产负债表" />
             </el-tab-pane>
 
-            <el-tab-pane label="现金流量表" name="cashflow">
+            <el-tab-pane name="cashflow">
+              <template #label>
+                <el-icon><Money /></el-icon>
+                <span>现金流量表</span>
+              </template>
               <div v-if="cashFlowReport">
                 <el-descriptions :column="2" border>
                   <el-descriptions-item label="经营活动现金流入">¥{{ cashFlowReport.operating_cash_in.toFixed(2) }}</el-descriptions-item>
@@ -316,14 +284,77 @@
           </el-tabs>
         </el-card>
       </el-tab-pane>
+
+      <!-- 增值税月报 -->
+      <el-tab-pane name="vat">
+        <template #label>
+          <el-icon><Document /></el-icon>
+          <span>增值税月报</span>
+        </template>
+        <el-card>
+          <template #header>
+            <span>增值税月报</span>
+            <el-button size="small" type="primary" style="float: right;" @click="exportReport('vat_monthly')" :disabled="!vatReport">
+              导出Excel
+            </el-button>
+          </template>
+          <el-form :inline="true" :model="periodForm">
+            <el-form-item label="所属月份">
+              <el-date-picker v-model="periodForm.vatPeriod" type="month" value-format="YYYY-MM" placeholder="选择月份" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="generateReport('vat_monthly')" :loading="loading.vat">生成报表</el-button>
+            </el-form-item>
+          </el-form>
+          <div v-if="vatReport" style="margin-top: 16px;">
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="所属期">{{ vatReport.period }}</el-descriptions-item>
+              <el-descriptions-item label="销项发票数">{{ vatReport.output_count }} 张</el-descriptions-item>
+              <el-descriptions-item label="销项金额">¥{{ vatReport.output_amount.toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="进项发票数">{{ vatReport.input_count }} 张</el-descriptions-item>
+              <el-descriptions-item label="进项金额">¥{{ vatReport.input_amount.toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="销项税额">¥{{ vatReport.output_tax.toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="进项税额">¥{{ vatReport.input_tax.toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="应缴增值税">¥{{ vatReport.tax_due.toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="城建税(7%)">¥{{ vatReport.surcharge_city.toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="教育费附加(3%)">¥{{ vatReport.surcharge_education.toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="地方教育附加(2%)">¥{{ vatReport.surcharge_local.toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="合计应缴">
+                <el-tag type="danger" size="large">¥{{ vatReport.total_tax_due.toFixed(2) }}</el-tag>
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <!-- 按税率明细 -->
+            <el-table :data="vatReport.items" stripe style="margin-top: 16px;" border size="small">
+              <el-table-column label="税率" width="100">
+                <template #default="scope">{{ (scope.row.tax_rate * 100).toFixed(0) }}%</template>
+              </el-table-column>
+              <el-table-column prop="output_amount" label="销项金额" width="150">
+                <template #default="scope">¥{{ scope.row.output_amount.toFixed(2) }}</template>
+              </el-table-column>
+              <el-table-column prop="output_tax" label="销项税额" width="150">
+                <template #default="scope">¥{{ scope.row.output_tax.toFixed(2) }}</template>
+              </el-table-column>
+              <el-table-column prop="input_amount" label="进项金额" width="150">
+                <template #default="scope">¥{{ scope.row.input_amount.toFixed(2) }}</template>
+              </el-table-column>
+              <el-table-column prop="input_tax" label="进项税额" width="150">
+                <template #default="scope">¥{{ scope.row.input_tax.toFixed(2) }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <el-empty v-else description="请选择月份并生成增值税月报" />
+        </el-card>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
+import { Document, PieChart, User, DataAnalysis, TrendCharts, ScaleToOriginal, Money } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 
 // ==================== 类型定义 ====================
@@ -423,16 +454,27 @@ interface CashFlowReport {
 
 // ==================== 状态管理 ====================
 
-const activeTab = ref('vat')
+const activeTab = ref('cit')
 const financialSubTab = ref('income')
 
 const periodForm = reactive({
   vatPeriod: dayjs().format('YYYY-MM'),
-  citPeriod: dayjs().format('YYYY-MM'),
+  citPeriod: `${dayjs().format('YYYY')}-Q${Math.floor(dayjs().month() / 3) + 1}`,
   pitPeriod: dayjs().format('YYYY-MM'),
   periodType: 'monthly',
   financialPeriod: dayjs().format('YYYY-MM'),
 })
+
+const formatCitPeriod = (period: string) => {
+  const [y, q] = period.split('-')
+  const labels: Record<string, string> = {
+    Q1: '第一季度',
+    Q2: '第二季度',
+    Q3: '第三季度',
+    Q4: '第四季度',
+  }
+  return `${y}年${labels[q] || q}`
+}
 
 const year = dayjs().format('YYYY')
 const quarters = [
@@ -592,9 +634,4 @@ const exportReport = async (reportType: string) => {
     ElMessage.error('导出失败: ' + e)
   }
 }
-
-onMounted(() => {
-  // 自动生成当前月份的增值税月报
-  generateReport('vat_monthly')
-})
 </script>

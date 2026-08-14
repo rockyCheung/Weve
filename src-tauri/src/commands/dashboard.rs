@@ -2,6 +2,7 @@ use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use chrono::{NaiveDate, Datelike};
+use crate::commands::tax_calendar::load_custom_calendar_items;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DashboardStats {
@@ -138,6 +139,25 @@ pub fn get_dashboard_stats(state: State<AppState>) -> Result<DashboardStats, Str
         |row| row.get(0),
     ).unwrap_or(0);
 
+    // 自定义税务事项统计
+    let mut custom_pending = 0i64;
+    let mut custom_overdue = 0i64;
+    let mut custom_upcoming = 0i64;
+    for y in [today.year(), today.year() + 1] {
+        for item in load_custom_calendar_items(&db, y).unwrap_or_default() {
+            match item.status.as_str() {
+                "overdue" => custom_overdue += 1,
+                "pending" => {
+                    custom_pending += 1;
+                    if item.days_remaining <= 7 {
+                        custom_upcoming += 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     Ok(DashboardStats {
         employee_count,
         active_employee_count,
@@ -145,9 +165,9 @@ pub fn get_dashboard_stats(state: State<AppState>) -> Result<DashboardStats, Str
         monthly_expense,
         monthly_profit,
         pending_approvals,
-        pending_tax_reports,
-        overdue_tax_items,
-        upcoming_deadlines,
+        pending_tax_reports: pending_tax_reports + custom_pending,
+        overdue_tax_items: overdue_tax_items + custom_overdue,
+        upcoming_deadlines: upcoming_deadlines + custom_upcoming,
     })
 }
 

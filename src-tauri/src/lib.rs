@@ -74,6 +74,11 @@ pub fn run() {
             commands::tax_calendar::mark_as_reminded,
             commands::tax_calendar::mark_as_submitted,
             commands::tax_calendar::check_upcoming_deadlines,
+            commands::tax_calendar::get_custom_tax_items,
+            commands::tax_calendar::create_custom_tax_item,
+            commands::tax_calendar::update_custom_tax_item,
+            commands::tax_calendar::delete_custom_tax_item,
+            commands::tax_calendar::mark_custom_item_submitted,
             // 仪表盘命令
             commands::dashboard::get_dashboard_stats,
             commands::dashboard::get_monthly_trend,

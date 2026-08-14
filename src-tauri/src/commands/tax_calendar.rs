@@ -2,6 +2,7 @@ use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use chrono::{NaiveDate, Datelike};
+use std::collections::HashMap;
 
 // ==================== 税务日历生成 ====================
 
@@ -17,6 +18,8 @@ pub struct TaxCalendarItem {
     pub status: String,        // pending / submitted / overdue
     pub is_reminded: bool,
     pub tax_amount: f64,
+    pub is_custom: bool,
+    pub custom_item_id: Option<i64>,
 }
 
 /// 获取纳税人类型（从设置中读取）
@@ -178,6 +181,8 @@ pub fn generate_tax_calendar(state: State<AppState>, year: i32) -> Result<Vec<Ta
                 status: status.to_string(),
                 is_reminded,
                 tax_amount,
+                is_custom: false,
+                custom_item_id: None,
             });
         }
     }
@@ -223,7 +228,7 @@ pub fn get_tax_calendar(state: State<AppState>, year: Option<i32>) -> Result<Vec
     ).map_err(|e| e.to_string())?;
     
     let pattern = format!("{}-%", target_year);
-    let items = stmt.query_map(rusqlite::params![pattern], |row| {
+    let mut items: Vec<TaxCalendarItem> = stmt.query_map(rusqlite::params![pattern], |row| {
         let tax_type: String = row.get(1)?;
         let period: String = row.get(2)?;
         let due_date_str: String = row.get(3)?;
@@ -241,11 +246,18 @@ pub fn get_tax_calendar(state: State<AppState>, year: Option<i32>) -> Result<Vec
             status: row.get(6)?,
             is_reminded: row.get::<_, i32>(4)? != 0,
             tax_amount: row.get(5)?,
+            is_custom: false,
+            custom_item_id: None,
         })
     }).map_err(|e| e.to_string())?
     .filter_map(|r| r.ok())
     .collect();
-    
+
+    // 合并自定义税务事项
+    let mut custom_items = load_custom_calendar_items(&db, target_year)?;
+    items.append(&mut custom_items);
+    items.sort_by(|a, b| a.due_date.cmp(&b.due_date));
+
     Ok(items)
 }
 
@@ -354,6 +366,8 @@ pub fn check_upcoming_deadlines(state: State<AppState>) -> Result<ReminderNotifi
             status,
             is_reminded: row.get::<_, i32>(4)? != 0,
             tax_amount: row.get(5)?,
+            is_custom: false,
+            custom_item_id: None,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -368,10 +382,307 @@ pub fn check_upcoming_deadlines(state: State<AppState>) -> Result<ReminderNotifi
         }
         items.push(item);
     }
-    
+
+    // 合并自定义税务事项的提醒（当前年 + 下一年）
+    for y in [today.year(), today.year() + 1] {
+        for item in load_custom_calendar_items(&db, y)? {
+            if item.status == "submitted" {
+                continue;
+            }
+            if item.status == "overdue" {
+                overdue_count += 1;
+                items.push(item);
+            } else if item.days_remaining >= 0 && item.days_remaining <= 7 {
+                urgent_count += 1;
+                items.push(item);
+            }
+        }
+    }
+    items.sort_by(|a, b| a.due_date.cmp(&b.due_date));
+
     Ok(ReminderNotification {
         items,
         urgent_count,
         overdue_count,
     })
+}
+
+// ==================== 自定义税务事项 ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CustomTaxItem {
+    pub id: i64,
+    pub name: String,
+    pub frequency: String,       // monthly / quarterly / annual / once
+    pub due_month: Option<i64>,
+    pub due_day: i64,
+    pub once_date: Option<String>,
+    pub remark: String,
+    pub is_enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomTaxItemInput {
+    pub name: String,
+    pub frequency: String,
+    pub due_month: Option<i64>,
+    pub due_day: i64,
+    pub once_date: Option<String>,
+    pub remark: String,
+    pub is_enabled: bool,
+}
+
+fn frequency_label(frequency: &str) -> String {
+    match frequency {
+        "monthly" => "每月".to_string(),
+        "quarterly" => "每季度".to_string(),
+        "annual" => "每年".to_string(),
+        "once" => "一次性".to_string(),
+        _ => frequency.to_string(),
+    }
+}
+
+fn last_day_of_month(year: i32, month: u32) -> u32 {
+    if month == 12 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1)
+            .and_then(|d| d.pred_opt())
+            .map(|d| d.day())
+            .unwrap_or(31)
+    } else {
+        NaiveDate::from_ymd_opt(year, month + 1, 1)
+            .and_then(|d| d.pred_opt())
+            .map(|d| d.day())
+            .unwrap_or(31)
+    }
+}
+
+/// 展开自定义事项为某一年度的具体截止日期，返回 (period, due_date)
+fn expand_custom_item(item: &CustomTaxItem, year: i32) -> Vec<(String, String)> {
+    let mut result = Vec::new();
+    let day = item.due_day.clamp(1, 31) as u32;
+
+    match item.frequency.as_str() {
+        "monthly" => {
+            for m in 1..=12u32 {
+                let d = day.min(last_day_of_month(year, m));
+                if let Some(due) = NaiveDate::from_ymd_opt(year, m, d) {
+                    result.push((format!("{:04}-{:02}", year, m), due.format("%Y-%m-%d").to_string()));
+                }
+            }
+        }
+        "quarterly" => {
+            let start = item.due_month.unwrap_or(1).clamp(1, 12) as i32;
+            for i in 0..4 {
+                let m_raw = start + i * 3;
+                let (y, m) = if m_raw > 12 { (year + 1, m_raw - 12) } else { (year, m_raw) };
+                let d = day.min(last_day_of_month(y, m as u32));
+                if let Some(due) = NaiveDate::from_ymd_opt(y, m as u32, d) {
+                    result.push((format!("{:04}-{:02}", y, m), due.format("%Y-%m-%d").to_string()));
+                }
+            }
+        }
+        "annual" => {
+            let m = item.due_month.unwrap_or(1).clamp(1, 12) as u32;
+            let d = day.min(last_day_of_month(year, m));
+            if let Some(due) = NaiveDate::from_ymd_opt(year, m, d) {
+                result.push((format!("{:04}", year), due.format("%Y-%m-%d").to_string()));
+            }
+        }
+        "once" => {
+            if let Some(date_str) = &item.once_date {
+                if let Ok(due) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    if due.year() == year {
+                        result.push((date_str.clone(), due.format("%Y-%m-%d").to_string()));
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    result
+}
+
+fn build_custom_calendar_item(
+    item: &CustomTaxItem,
+    period: &str,
+    due_date: &str,
+    today: NaiveDate,
+    submitted: bool,
+) -> TaxCalendarItem {
+    let due = NaiveDate::parse_from_str(due_date, "%Y-%m-%d").unwrap_or(today);
+    let days_remaining = (due - today).num_days();
+    let status = if submitted {
+        "submitted"
+    } else if days_remaining < 0 {
+        "overdue"
+    } else {
+        "pending"
+    };
+    TaxCalendarItem {
+        id: 0,
+        tax_type: "custom".to_string(),
+        tax_type_label: item.name.clone(),
+        period: period.to_string(),
+        period_label: frequency_label(&item.frequency),
+        due_date: due_date.to_string(),
+        days_remaining,
+        status: status.to_string(),
+        is_reminded: false,
+        tax_amount: 0.0,
+        is_custom: true,
+        custom_item_id: Some(item.id),
+    }
+}
+
+/// 加载某一年度所有启用的自定义事项并展开为日历条目
+pub fn load_custom_calendar_items(db: &rusqlite::Connection, year: i32) -> Result<Vec<TaxCalendarItem>, String> {
+    let today = chrono::Local::now().naive_local().date();
+
+    let mut stmt = db.prepare(
+        "SELECT id, name, frequency, due_month, due_day, once_date, remark, is_enabled
+         FROM custom_tax_items WHERE is_enabled = 1 ORDER BY id ASC"
+    ).map_err(|e| e.to_string())?;
+    let rules: Vec<CustomTaxItem> = stmt.query_map([], |row| {
+        Ok(CustomTaxItem {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            frequency: row.get(2)?,
+            due_month: row.get(3)?,
+            due_day: row.get(4)?,
+            once_date: row.get(5)?,
+            remark: row.get(6)?,
+            is_enabled: row.get::<_, i64>(7)? != 0,
+        })
+    }).map_err(|e| e.to_string())?
+    .filter_map(|r| r.ok())
+    .collect();
+
+    let mut records: HashMap<(i64, String), bool> = HashMap::new();
+    let mut rec_stmt = db.prepare(
+        "SELECT item_id, period, submitted FROM custom_tax_item_records WHERE submitted = 1"
+    ).map_err(|e| e.to_string())?;
+    let rec_rows = rec_stmt.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
+    }).map_err(|e| e.to_string())?;
+    for r in rec_rows.flatten() {
+        records.insert((r.0, r.1), r.2 != 0);
+    }
+
+    let mut items = Vec::new();
+    for rule in &rules {
+        for (period, due_date) in expand_custom_item(rule, year) {
+            let submitted = records.get(&(rule.id, period.clone())).copied().unwrap_or(false);
+            items.push(build_custom_calendar_item(rule, &period, &due_date, today, submitted));
+        }
+    }
+
+    Ok(items)
+}
+
+#[tauri::command]
+pub fn get_custom_tax_items(state: State<AppState>) -> Result<Vec<CustomTaxItem>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = db.prepare(
+        "SELECT id, name, frequency, due_month, due_day, once_date, remark, is_enabled
+         FROM custom_tax_items ORDER BY id ASC"
+    ).map_err(|e| e.to_string())?;
+    let items = stmt.query_map([], |row| {
+        Ok(CustomTaxItem {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            frequency: row.get(2)?,
+            due_month: row.get(3)?,
+            due_day: row.get(4)?,
+            once_date: row.get(5)?,
+            remark: row.get(6)?,
+            is_enabled: row.get::<_, i64>(7)? != 0,
+        })
+    }).map_err(|e| e.to_string())?
+    .filter_map(|r| r.ok())
+    .collect();
+    Ok(items)
+}
+
+#[tauri::command]
+pub fn create_custom_tax_item(state: State<AppState>, input: CustomTaxItemInput) -> Result<CustomTaxItem, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "INSERT INTO custom_tax_items (name, frequency, due_month, due_day, once_date, remark, is_enabled)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            input.name,
+            input.frequency,
+            input.due_month,
+            input.due_day,
+            input.once_date,
+            input.remark,
+            input.is_enabled as i64
+        ],
+    ).map_err(|e| e.to_string())?;
+    let id = db.last_insert_rowid();
+    Ok(CustomTaxItem {
+        id,
+        name: input.name,
+        frequency: input.frequency,
+        due_month: input.due_month,
+        due_day: input.due_day,
+        once_date: input.once_date,
+        remark: input.remark,
+        is_enabled: input.is_enabled,
+    })
+}
+
+#[tauri::command]
+pub fn update_custom_tax_item(state: State<AppState>, id: i64, input: CustomTaxItemInput) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "UPDATE custom_tax_items SET name = ?1, frequency = ?2, due_month = ?3, due_day = ?4,
+         once_date = ?5, remark = ?6, is_enabled = ?7, updated_at = datetime('now', 'localtime')
+         WHERE id = ?8",
+        rusqlite::params![
+            input.name,
+            input.frequency,
+            input.due_month,
+            input.due_day,
+            input.once_date,
+            input.remark,
+            input.is_enabled as i64,
+            id
+        ],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_custom_tax_item(state: State<AppState>, id: i64) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute("DELETE FROM custom_tax_items WHERE id = ?1", rusqlite::params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn mark_custom_item_submitted(state: State<AppState>, item_id: i64, period: String, submitted: bool) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let exists: i64 = db.query_row(
+        "SELECT COUNT(*) FROM custom_tax_item_records WHERE item_id = ?1 AND period = ?2",
+        rusqlite::params![item_id, period],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    if exists > 0 {
+        db.execute(
+            "UPDATE custom_tax_item_records SET submitted = ?1,
+             submitted_at = CASE WHEN ?1 = 1 THEN datetime('now', 'localtime') ELSE NULL END
+             WHERE item_id = ?2 AND period = ?3",
+            rusqlite::params![submitted as i64, item_id, period],
+        ).map_err(|e| e.to_string())?;
+    } else if submitted {
+        db.execute(
+            "INSERT INTO custom_tax_item_records (item_id, period, submitted, submitted_at)
+             VALUES (?1, ?2, 1, datetime('now', 'localtime'))",
+            rusqlite::params![item_id, period],
+        ).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }

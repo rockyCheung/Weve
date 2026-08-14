@@ -156,6 +156,29 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS custom_tax_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    frequency TEXT NOT NULL DEFAULT 'annual',
+    due_month INTEGER,
+    due_day INTEGER NOT NULL DEFAULT 15,
+    once_date TEXT,
+    remark TEXT NOT NULL DEFAULT '',
+    is_enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS custom_tax_item_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    submitted INTEGER NOT NULL DEFAULT 0,
+    submitted_at TEXT,
+    UNIQUE(item_id, period),
+    FOREIGN KEY (item_id) REFERENCES custom_tax_items(id) ON DELETE CASCADE
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_attendance_employee_date ON attendance(employee_id, date);
 CREATE INDEX IF NOT EXISTS idx_vouchers_date ON vouchers(date);

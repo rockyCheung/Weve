@@ -125,28 +125,27 @@ pub struct CitReport {
     pub is_small_profit: bool,  // 是否小微企业优惠
 }
 
-/// 生成企业所得税季报
+/// 生成企业所得税季报（period 格式：YYYY-Qn，如 2026-Q1）
 pub fn generate_cit_report(conn: &Connection, period: &str) -> Result<CitReport, String> {
-    let (year, month) = period.split_once('-').ok_or("Invalid period format")?;
-    let quarter_start = match month {
-        "01" | "02" | "03" => format!("{}-01-01", year),
-        "04" | "05" | "06" => format!("{}-04-01", year),
-        "07" | "08" | "09" => format!("{}-07-01", year),
-        "10" | "11" | "12" => format!("{}-10-01", year),
-        _ => return Err("Invalid month".to_string()),
+    let (year, quarter) = period.split_once('-').ok_or("Invalid period format")?;
+    let quarter_num: i32 = quarter
+        .trim_start_matches('Q')
+        .parse()
+        .map_err(|_| "Invalid quarter format")?;
+    let start_month = match quarter_num {
+        1 => "01",
+        2 => "04",
+        3 => "07",
+        4 => "10",
+        _ => return Err("季度范围 1-4".to_string()),
     };
-    
-    let next_quarter = if month == "12" {
+    let quarter_start = format!("{}-{}-01", year, start_month);
+
+    // 下一季度第一天（用于范围截止）
+    let next_quarter = if quarter_num == 4 {
         format!("{}-01-01", year.parse::<i32>().unwrap_or(2025) + 1)
     } else {
-        let q_month = match month {
-            "01" | "02" | "03" => "04",
-            "04" | "05" | "06" => "07",
-            "07" | "08" | "09" => "10",
-            _ => "01",
-        };
-        let y = if q_month == "01" { year.parse::<i32>().unwrap_or(2025) + 1 } else { year.parse::<i32>().unwrap_or(2025) };
-        format!("{}-{}-01", y, q_month)
+        format!("{}-{:02}-01", year, quarter_num * 3 + 1)
     };
 
     // 从收入科目（6开头）汇总营业收入

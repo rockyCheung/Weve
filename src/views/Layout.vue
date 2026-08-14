@@ -14,12 +14,30 @@
           @select="handleSelect"
           class="global-nav"
         >
-          <el-menu-item index="/hr">人事管理</el-menu-item>
-          <el-menu-item index="/payroll">薪酬管理</el-menu-item>
-          <el-menu-item index="/accounting">记账管理</el-menu-item>
-          <el-menu-item index="/invoices">发票管理</el-menu-item>
-          <el-menu-item index="/tax-reports">税务报表</el-menu-item>
-          <el-menu-item index="/tax-calendar">税务日历</el-menu-item>
+          <el-menu-item index="/hr">
+            <el-icon><User /></el-icon>
+            <span>人事管理</span>
+          </el-menu-item>
+          <el-menu-item index="/payroll">
+            <el-icon><Money /></el-icon>
+            <span>薪酬管理</span>
+          </el-menu-item>
+          <el-menu-item index="/accounting">
+            <el-icon><Document /></el-icon>
+            <span>记账管理</span>
+          </el-menu-item>
+          <el-menu-item index="/invoices">
+            <el-icon><Tickets /></el-icon>
+            <span>发票管理</span>
+          </el-menu-item>
+          <el-menu-item index="/tax-reports">
+            <el-icon><TrendCharts /></el-icon>
+            <span>税务报表</span>
+          </el-menu-item>
+          <el-menu-item index="/tax-calendar">
+            <el-icon><Calendar /></el-icon>
+            <span>税务日历</span>
+          </el-menu-item>
         </el-menu>
         <template v-if="currentLabel">
           <el-divider direction="vertical" />
@@ -47,7 +65,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { HomeFilled, Setting, Coin } from "@element-plus/icons-vue";
+import { HomeFilled, Setting, Coin, User, Money, Document, Tickets, TrendCharts, Calendar } from "@element-plus/icons-vue";
 import { check } from "@tauri-apps/plugin-updater";
 import { ElMessageBox } from "element-plus";
 import { relaunch } from "@tauri-apps/plugin-process";
