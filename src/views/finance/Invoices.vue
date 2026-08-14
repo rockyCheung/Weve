@@ -2,7 +2,11 @@
   <div>
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <!-- 销项发票 -->
-      <el-tab-pane label="销项发票" name="output">
+      <el-tab-pane name="output">
+        <template #label>
+          <el-icon><Sell /></el-icon>
+          <span>销项发票</span>
+        </template>
         <el-card>
           <template #header>
             <span>销项发票管理</span>
@@ -54,7 +58,11 @@
       </el-tab-pane>
 
       <!-- 进项发票 -->
-      <el-tab-pane label="进项发票" name="input">
+      <el-tab-pane name="input">
+        <template #label>
+          <el-icon><ShoppingCart /></el-icon>
+          <span>进项发票</span>
+        </template>
         <el-card>
           <template #header>
             <span>进项发票管理</span>
@@ -119,7 +127,11 @@
       </el-tab-pane>
 
       <!-- 发票统计 -->
-      <el-tab-pane label="发票统计" name="summary">
+      <el-tab-pane name="summary">
+        <template #label>
+          <el-icon><DataAnalysis /></el-icon>
+          <span>发票统计</span>
+        </template>
         <el-card>
           <template #header>
             <span>发票统计</span>
@@ -169,7 +181,11 @@
       </el-tab-pane>
 
       <!-- 到期提醒 -->
-      <el-tab-pane label="到期提醒" name="reminders">
+      <el-tab-pane name="reminders">
+        <template #label>
+          <el-icon><AlarmClock /></el-icon>
+          <span>到期提醒</span>
+        </template>
         <el-card>
           <template #header>
             <span>进项发票认证到期提醒</span>
@@ -247,6 +263,7 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
+import { Sell, ShoppingCart, DataAnalysis, AlarmClock } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 
 // ==================== 类型定义 ====================

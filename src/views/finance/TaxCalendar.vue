@@ -56,6 +56,7 @@
               </el-select>
               <el-button type="primary" @click="refreshCalendar">刷新日历</el-button>
               <el-button type="success" @click="generateCalendar">生成全年日历</el-button>
+              <el-button type="warning" @click="openCustomItems">自定义事项</el-button>
             </div>
           </template>
 
@@ -78,7 +79,8 @@
             </el-table-column>
             <el-table-column prop="tax_amount" label="税额" width="120">
               <template #default="scope">
-                ¥{{ scope.row.tax_amount.toFixed(2) }}
+                <span v-if="scope.row.is_custom">-</span>
+                <span v-else>¥{{ scope.row.tax_amount.toFixed(2) }}</span>
               </template>
             </el-table-column>
             <el-table-column label="状态" width="100">
@@ -88,24 +90,39 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="200">
+            <el-table-column label="操作" width="220">
               <template #default="scope">
-                <el-button 
-                  v-if="scope.row.status === 'pending' || scope.row.status === 'overdue'"
-                  size="small" 
-                  type="success" 
-                  @click="markSubmitted(scope.row)"
-                >
-                  标记已申报
-                </el-button>
-                <el-button 
-                  v-if="!scope.row.is_reminded && scope.row.status !== 'submitted'"
-                  size="small" 
-                  type="warning" 
-                  @click="markReminded(scope.row.id)"
-                >
-                  标记已提醒
-                </el-button>
+                <template v-if="scope.row.is_custom">
+                  <el-button
+                    v-if="scope.row.status !== 'submitted'"
+                    size="small"
+                    type="success"
+                    @click="markCustomSubmitted(scope.row)"
+                  >
+                    标记完成
+                  </el-button>
+                  <el-button v-else size="small" @click="markCustomSubmitted(scope.row)">
+                    撤销
+                  </el-button>
+                </template>
+                <template v-else>
+                  <el-button
+                    v-if="scope.row.status === 'pending' || scope.row.status === 'overdue'"
+                    size="small"
+                    type="success"
+                    @click="markSubmitted(scope.row)"
+                  >
+                    标记已申报
+                  </el-button>
+                  <el-button
+                    v-if="!scope.row.is_reminded && scope.row.status !== 'submitted'"
+                    size="small"
+                    type="warning"
+                    @click="markReminded(scope.row.id)"
+                  >
+                    标记已提醒
+                  </el-button>
+                </template>
               </template>
             </el-table-column>
           </el-table>
@@ -150,12 +167,98 @@
           <el-button @click="reminderDialogVisible = false">我知道了</el-button>
         </template>
       </el-dialog>
+
+      <!-- 自定义事项管理弹窗 -->
+      <el-dialog v-model="customItemsDialogVisible" title="自定义税务事项" width="760px">
+        <el-alert
+          title="不同企业类型的待办税务事项不同，例如小微企业一般涉及印花税（每年1月1日—20日申报，逾期罚款）。可在此新增、修改或停用重要事项。"
+          type="info"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 16px;"
+        />
+        <div style="margin-bottom: 12px; text-align: right;">
+          <el-button type="primary" size="small" @click="openCustomForm()">新增事项</el-button>
+        </div>
+        <el-table :data="customItems" stripe size="small" max-height="400">
+          <el-table-column prop="name" label="事项名称" min-width="150" />
+          <el-table-column label="申报频率" width="90">
+            <template #default="scope">{{ frequencyLabel(scope.row.frequency) }}</template>
+          </el-table-column>
+          <el-table-column label="截止日期" width="150">
+            <template #default="scope">{{ customDueText(scope.row) }}</template>
+          </el-table-column>
+          <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+          <el-table-column label="启用" width="70">
+            <template #default="scope">
+              <el-tag :type="scope.row.is_enabled ? 'success' : 'info'" size="small">
+                {{ scope.row.is_enabled ? '启用' : '停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="130">
+            <template #default="scope">
+              <el-button size="small" @click="openCustomForm(scope.row)">编辑</el-button>
+              <el-button size="small" type="danger" @click="deleteCustomItem(scope.row.id)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="customItems.length === 0" description="暂无自定义事项，点击右上角新增" />
+      </el-dialog>
+
+      <!-- 自定义事项编辑弹窗 -->
+      <el-dialog v-model="customFormVisible" :title="customEditId ? '编辑事项' : '新增事项'" width="480px">
+        <el-form :model="customForm" label-width="110px">
+          <el-form-item label="事项名称">
+            <el-input v-model="customForm.name" placeholder="如：印花税、工商年报、汇算清缴" />
+          </el-form-item>
+          <el-form-item label="申报频率">
+            <el-radio-group v-model="customForm.frequency">
+              <el-radio label="annual">每年</el-radio>
+              <el-radio label="quarterly">每季度</el-radio>
+              <el-radio label="monthly">每月</el-radio>
+              <el-radio label="once">一次性</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="customForm.frequency === 'once'" label="申报日期">
+            <el-date-picker
+              v-model="customForm.once_date"
+              type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="选择日期"
+            />
+          </el-form-item>
+          <template v-else>
+            <el-form-item v-if="customForm.frequency !== 'monthly'" label="申报月份">
+              <el-select v-model="customForm.due_month" style="width: 120px">
+                <el-option v-for="m in 12" :key="m" :label="`${m}月`" :value="m" />
+              </el-select>
+              <span v-if="customForm.frequency === 'quarterly'" class="form-tip">按此月及每后推3个月申报</span>
+            </el-form-item>
+            <el-form-item label="截止日">
+              <el-select v-model="customForm.due_day" style="width: 120px">
+                <el-option v-for="d in 31" :key="d" :label="`${d}日`" :value="d" />
+              </el-select>
+            </el-form-item>
+          </template>
+          <el-form-item label="备注">
+            <el-input v-model="customForm.remark" type="textarea" :rows="2" placeholder="填写说明，如逾期罚款规则" />
+          </el-form-item>
+          <el-form-item label="是否启用">
+            <el-switch v-model="customForm.is_enabled" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="customFormVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitCustomItem">确定</el-button>
+        </template>
+      </el-dialog>
     </el-row>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
@@ -173,6 +276,19 @@ interface TaxCalendarItem {
   status: string
   is_reminded: boolean
   tax_amount: number
+  is_custom: boolean
+  custom_item_id: number | null
+}
+
+interface CustomTaxItem {
+  id: number
+  name: string
+  frequency: string
+  due_month: number | null
+  due_day: number
+  once_date: string | null
+  remark: string
+  is_enabled: boolean
 }
 
 interface ReminderData {
@@ -189,6 +305,20 @@ const statusFilter = ref('')
 const reminderDialogVisible = ref(false)
 const reminderData = ref<ReminderData>({ items: [], urgent_count: 0, overdue_count: 0 })
 const calendarItems = ref<TaxCalendarItem[]>([])
+
+const customItems = ref<CustomTaxItem[]>([])
+const customItemsDialogVisible = ref(false)
+const customFormVisible = ref(false)
+const customEditId = ref<number | null>(null)
+const customForm = reactive({
+  name: "",
+  frequency: "annual",
+  due_month: 1,
+  due_day: 15,
+  once_date: "",
+  remark: "",
+  is_enabled: true,
+})
 
 const years = computed(() => {
   const currentYear = dayjs().year()
@@ -231,6 +361,7 @@ const getTaxTypeTag = (type: string) => {
     cit: 'warning',
     surcharge: 'info',
     personal_income: 'success',
+    custom: 'primary',
   }
   return map[type] || ''
 }
@@ -312,6 +443,131 @@ const markReminded = async (id: number) => {
   }
 }
 
+// ==================== 自定义事项管理 ====================
+
+const frequencyLabel = (frequency: string) => {
+  const map: Record<string, string> = {
+    monthly: '每月',
+    quarterly: '每季度',
+    annual: '每年',
+    once: '一次性',
+  }
+  return map[frequency] || frequency
+}
+
+const customDueText = (item: CustomTaxItem) => {
+  if (item.frequency === 'once') {
+    return item.once_date || '-'
+  }
+  if (item.frequency === 'monthly') {
+    return `每月 ${item.due_day} 日`
+  }
+  if (item.frequency === 'quarterly') {
+    return `每季度 ${item.due_month ?? 1} 月 ${item.due_day} 日`
+  }
+  return `每年 ${item.due_month ?? 1} 月 ${item.due_day} 日`
+}
+
+const fetchCustomItems = async () => {
+  try {
+    customItems.value = await invoke('get_custom_tax_items')
+  } catch (e) {
+    console.error('获取自定义事项失败:', e)
+  }
+}
+
+const openCustomItems = () => {
+  customItemsDialogVisible.value = true
+  fetchCustomItems()
+}
+
+const openCustomForm = (item?: CustomTaxItem) => {
+  if (item) {
+    customEditId.value = item.id
+    Object.assign(customForm, {
+      name: item.name,
+      frequency: item.frequency,
+      due_month: item.due_month ?? 1,
+      due_day: item.due_day,
+      once_date: item.once_date || '',
+      remark: item.remark,
+      is_enabled: item.is_enabled,
+    })
+  } else {
+    customEditId.value = null
+    Object.assign(customForm, {
+      name: '',
+      frequency: 'annual',
+      due_month: 1,
+      due_day: 15,
+      once_date: '',
+      remark: '',
+      is_enabled: true,
+    })
+  }
+  customFormVisible.value = true
+}
+
+const submitCustomItem = async () => {
+  if (!customForm.name.trim()) {
+    ElMessage.warning('请输入事项名称')
+    return
+  }
+  if (customForm.frequency === 'once' && !customForm.once_date) {
+    ElMessage.warning('请选择申报日期')
+    return
+  }
+  const input = {
+    name: customForm.name.trim(),
+    frequency: customForm.frequency,
+    due_month: customForm.frequency === 'monthly' ? null : customForm.due_month,
+    due_day: customForm.due_day,
+    once_date: customForm.frequency === 'once' ? customForm.once_date : null,
+    remark: customForm.remark,
+    is_enabled: customForm.is_enabled,
+  }
+  try {
+    if (customEditId.value) {
+      await invoke('update_custom_tax_item', { id: customEditId.value, input })
+      ElMessage.success('事项已更新')
+    } else {
+      await invoke('create_custom_tax_item', { input })
+      ElMessage.success('事项已添加')
+    }
+    customFormVisible.value = false
+    await fetchCustomItems()
+    await fetchCalendar()
+  } catch (e) {
+    ElMessage.error('保存失败: ' + e)
+  }
+}
+
+const deleteCustomItem = async (id: number) => {
+  try {
+    await invoke('delete_custom_tax_item', { id })
+    ElMessage.success('已删除')
+    await fetchCustomItems()
+    await fetchCalendar()
+  } catch (e) {
+    ElMessage.error('删除失败: ' + e)
+  }
+}
+
+const markCustomSubmitted = async (item: TaxCalendarItem) => {
+  try {
+    const submitted = item.status !== 'submitted'
+    await invoke('mark_custom_item_submitted', {
+      itemId: item.custom_item_id,
+      period: item.period,
+      submitted,
+    })
+    ElMessage.success(submitted ? '已标记完成' : '已撤销')
+    await fetchCalendar()
+  } catch (e) {
+    ElMessage.error('操作失败: ' + e)
+  }
+}
+
 const checkReminders = async () => {
   try {
     const data: ReminderData = await invoke('check_upcoming_deadlines')
@@ -347,5 +603,10 @@ onMounted(async () => {
   font-size: 14px;
   color: #909399;
   margin-top: 8px;
+}
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 8px;
 }
 </style>

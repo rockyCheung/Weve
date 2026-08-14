@@ -2,7 +2,11 @@
   <div>
     <el-tabs v-model="activeTab">
       <!-- 凭证录入 -->
-      <el-tab-pane label="凭证录入" name="vouchers">
+      <el-tab-pane name="vouchers">
+        <template #label>
+          <el-icon><Edit /></el-icon>
+          <span>凭证录入</span>
+        </template>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-card>
@@ -220,7 +224,11 @@
       </el-tab-pane>
 
       <!-- 试算平衡 -->
-      <el-tab-pane label="试算平衡" name="trial">
+      <el-tab-pane name="trial">
+        <template #label>
+          <el-icon><ScaleToOriginal /></el-icon>
+          <span>试算平衡</span>
+        </template>
         <el-card>
           <template #header>
             <span>试算平衡表</span>
@@ -267,7 +275,11 @@
       </el-tab-pane>
 
       <!-- 银行流水导入 -->
-      <el-tab-pane label="银行流水" name="bank">
+      <el-tab-pane name="bank">
+        <template #label>
+          <el-icon><CreditCard /></el-icon>
+          <span>银行流水</span>
+        </template>
         <el-card>
           <template #header>
             <span>银行流水导入</span>
@@ -301,7 +313,11 @@
       </el-tab-pane>
 
       <!-- 科目管理 -->
-      <el-tab-pane label="科目管理" name="accounts">
+      <el-tab-pane name="accounts">
+        <template #label>
+          <el-icon><Folder /></el-icon>
+          <span>科目管理</span>
+        </template>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-card>
@@ -519,7 +535,7 @@
 import { ref, computed, onMounted, reactive } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { UploadFilled, Paperclip, Document } from "@element-plus/icons-vue";
+import { UploadFilled, Paperclip, Document, Edit, ScaleToOriginal, CreditCard, Folder } from "@element-plus/icons-vue";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { open as openPath } from "@tauri-apps/plugin-shell";
 import type { UploadFile } from "element-plus";
