@@ -528,7 +528,6 @@ pub struct PayrollVoucherResult {
 #[tauri::command]
 pub fn generate_payroll_voucher(
     state: State<AppState>,
-    period: String,
     voucher_type: String,
     voucher_date: String,
 ) -> Result<PayrollVoucherResult, String> {
@@ -627,15 +626,49 @@ pub fn generate_payroll_voucher(
     let total_insurance_pay = employer_insurance + employee_insurance;
     let total_fund_pay = employer_housing_fund + employee_housing_fund;
 
-    let (_, month) = period.split_once('-').ok_or("期间格式错误")?;
+    // 工资所属月份由录制日期推导：
+    // - 计提类：取录制日期当月（费用在发生当月计提）
+    // - 发放/缴纳类：取录制日期的上一个月（次月发放/缴纳上月工资社保）
+    let (year_str, rest) = voucher_date
+        .split_once('-')
+        .ok_or("录制日期格式错误，应为 YYYY-MM-DD")?;
+    let (month_str, _) = rest
+        .split_once('-')
+        .ok_or("录制日期格式错误，应为 YYYY-MM-DD")?;
+    let year: i32 = year_str.parse().map_err(|_| "录制日期的年份格式错误")?;
+    let month_num: u32 = month_str.parse().map_err(|_| "录制日期的月份格式错误")?;
+    let (period_year, period_month) = if voucher_type == "accrual" {
+        (year, month_num)
+    } else if month_num == 1 {
+        (year - 1, 12)
+    } else {
+        (year, month_num - 1)
+    };
+    let period = format!("{:04}-{:02}", period_year, period_month);
+    // 月份不带前导零，用于中文摘要（如 08 → 8）
+    let month = period_month.to_string();
 
     let gen_voucher_no = |prefix: &str| -> Result<String, String> {
+        // 凭证号全局唯一；按前缀范围统计已有数量，并逐个校验直到不重复，
+        // 避免同类型凭证跨日期生成时序号冲突
         let count: i64 = db.query_row(
-            "SELECT COUNT(*) FROM vouchers WHERE date = ?1 AND voucher_no LIKE ?2",
-            rusqlite::params![voucher_date, format!("{}%", prefix)],
+            "SELECT COUNT(*) FROM vouchers WHERE voucher_no LIKE ?1",
+            rusqlite::params![format!("{}%", prefix)],
             |row| row.get(0),
         ).map_err(|e| e.to_string())?;
-        Ok(format!("{}-{:04}", prefix, count + 1))
+        let mut seq = count + 1;
+        loop {
+            let candidate = format!("{}-{:04}", prefix, seq);
+            let exists: i64 = db.query_row(
+                "SELECT COUNT(*) FROM vouchers WHERE voucher_no = ?1",
+                rusqlite::params![candidate],
+                |row| row.get(0),
+            ).map_err(|e| e.to_string())?;
+            if exists == 0 {
+                return Ok(candidate);
+            }
+            seq += 1;
+        }
     };
 
     let insert_entries = |voucher_id: i64, rows: &[(i64, f64, f64, String)]| -> Result<(), String> {
@@ -654,7 +687,7 @@ pub fn generate_payroll_voucher(
     let (prefix, summary, entries) = match voucher_type.as_str() {
         "accrual" => (
             format!("JTGZ{}", period.replace("-", "")),
-            format!("{} 计提工资及社保公积金", period),
+            format!("计提{}月份工资及社保公积金", month),
             vec![
                 (admin_expense_id, total_salary, 0.0, format!("计提{}月工资", month)),
                 (admin_expense_id, employer_insurance, 0.0, format!("计提{}月社保-公司部分", month)),
@@ -666,7 +699,7 @@ pub fn generate_payroll_voucher(
         ),
         "salary_payment" => (
             format!("FFGZ{}", period.replace("-", "")),
-            format!("{} 发放工资", period),
+            format!("发放{}月份的工资", month),
             vec![
                 (salary_payable_id, total_salary, 0.0, format!("支付{}月工资", month)),
                 (bank_deposit_id, 0.0, net_pay_total, format!("实发{}月工资", month)),
@@ -677,7 +710,7 @@ pub fn generate_payroll_voucher(
         ),
         "insurance_payment" => (
             format!("JNSB{}", period.replace("-", "")),
-            format!("{} 缴纳社保", period),
+            format!("缴纳{}月份的社保", month),
             vec![
                 (salary_payable_id, employer_insurance, 0.0, format!("支付{}月社保-公司部分", month)),
                 (other_payable_id, employee_insurance, 0.0, format!("支付{}月社保-个人部分", month)),
@@ -686,7 +719,7 @@ pub fn generate_payroll_voucher(
         ),
         "fund_payment" => (
             format!("JNGJJ{}", period.replace("-", "")),
-            format!("{} 缴纳公积金", period),
+            format!("缴纳{}月份的公积金", month),
             vec![
                 (salary_payable_id, employer_housing_fund, 0.0, format!("支付{}月公积金-公司部分", month)),
                 (other_payable_id, employee_housing_fund, 0.0, format!("支付{}月公积金-个人部分", month)),
