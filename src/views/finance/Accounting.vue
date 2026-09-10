@@ -127,16 +127,13 @@
               <template #header>
                 <span>薪资凭证自动生成</span>
               </template>
-              <el-form :inline="true">
-                <el-form-item label="所属月份">
-                  <el-date-picker
-                    v-model="payrollVoucherPeriod"
-                    type="month"
-                    value-format="YYYY-MM"
-                    placeholder="选择月份"
-                  />
-                </el-form-item>
-              </el-form>
+              <el-alert
+                title="录制日期即实际做账日期；工资所属月份自动推导：发放/缴纳类取录制日期的上一个月，计提类取录制日期当月。"
+                type="info"
+                :closable="false"
+                show-icon
+                style="margin-bottom: 12px"
+              />
               <el-table :data="payrollVoucherTypes" stripe size="small">
                 <el-table-column prop="label" label="凭证类型" width="160" />
                 <el-table-column label="录制日期" width="180">
@@ -641,21 +638,19 @@ const currentVoucherAttachments = computed(() => {
 });
 
 // 薪资凭证生成
-const payrollVoucherPeriod = ref(dayjs().format("YYYY-MM"));
 const payrollVoucherResultVisible = ref(false);
 const payrollVoucherResult = ref<PayrollVoucherResult | null>(null);
 
-// 计算缺省日期
-const lastDayOfPeriod = () => {
-  const d = dayjs(payrollVoucherPeriod.value);
-  return d.endOf("month").format("YYYY-MM-DD");
-};
+// 发放/缴纳类凭证的默认录制日期为今天（实际支付日）
+const today = dayjs().format("YYYY-MM-DD");
+// 计提类默认为本月月末（费用在发生当月计提）
+const currentMonthEnd = dayjs().endOf("month").format("YYYY-MM-DD");
 
 const payrollVoucherTypes = reactive([
-  { type: "accrual", label: "计提工资及社保公积金", date: lastDayOfPeriod(), loading: false },
-  { type: "salary_payment", label: "发放工资", date: "", loading: false },
-  { type: "insurance_payment", label: "缴纳社保", date: "", loading: false },
-  { type: "fund_payment", label: "缴纳公积金", date: "", loading: false },
+  { type: "accrual", label: "计提工资及社保公积金", date: currentMonthEnd, loading: false },
+  { type: "salary_payment", label: "发放工资", date: today, loading: false },
+  { type: "insurance_payment", label: "缴纳社保", date: today, loading: false },
+  { type: "fund_payment", label: "缴纳公积金", date: today, loading: false },
 ]);
 
 const generatePayrollVoucher = async (type: string, date: string) => {
@@ -667,7 +662,6 @@ const generatePayrollVoucher = async (type: string, date: string) => {
   row.loading = true;
   try {
     payrollVoucherResult.value = await invoke("generate_payroll_voucher", {
-      period: payrollVoucherPeriod.value,
       voucherType: type,
       voucherDate: date,
     });
