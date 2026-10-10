@@ -1,5 +1,6 @@
 use crate::AppState;
 use crate::services::tax_engine;
+use crate::services::fs_report;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -154,9 +155,13 @@ pub fn get_saved_reports(state: State<AppState>, report_type: Option<String>) ->
 }
 
 #[tauri::command]
-pub fn export_report(state: State<AppState>, report_type: String, period: String, format: String) -> Result<String, String> {
+pub fn export_report(state: State<AppState>, report_type: String, period: String, format: String, period_type: Option<String>, path: Option<String>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let path = std::env::temp_dir().join(format!("{}_{}.{}", report_type, period, format));
+    let path = path
+        .filter(|p| !p.trim().is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join(format!("{}_{}.{}", report_type, period, format)));
+    let pt = period_type.as_deref().unwrap_or("monthly");
     
     match format.as_str() {
         "xlsx" => {
@@ -170,12 +175,12 @@ pub fn export_report(state: State<AppState>, report_type: String, period: String
                     crate::services::export_service::export_cit_report_to_excel(&report, &path)?;
                 },
                 "income_statement" => {
-                    let (start_date, end_date) = parse_period_range(&period, "monthly")?;
+                    let (start_date, end_date) = parse_period_range(&period, pt)?;
                     let report = tax_engine::generate_income_statement(&db, &start_date, &end_date)?;
                     crate::services::export_service::export_income_statement_to_excel(&report, &path)?;
                 },
                 "balance_sheet" => {
-                    let (_, end_date) = parse_period_range(&period, "monthly")?;
+                    let (_, end_date) = parse_period_range(&period, pt)?;
                     let report = tax_engine::generate_balance_sheet(&db, &end_date)?;
                     crate::services::export_service::export_balance_sheet_to_excel(&report, &path)?;
                 },
@@ -185,4 +190,71 @@ pub fn export_report(state: State<AppState>, report_type: String, period: String
         },
         _ => Err("Unsupported format, only xlsx is supported".to_string()),
     }
+}
+
+fn period_label(period: &str, period_type: &str) -> String {
+    match period_type {
+        "quarterly" => match period.split_once('-') {
+            Some((y, q)) => format!("{}年第{}季度", y, q.trim_start_matches('Q')),
+            None => period.to_string(),
+        },
+        "semiannual" => match period.split_once('-') {
+            Some((y, h)) => format!("{}年第{}半年度", y, h.trim_start_matches('H')),
+            None => period.to_string(),
+        },
+        "annual" => format!("{}年度", period),
+        _ => match period.split_once('-') {
+            Some((y, m)) => format!("{}年{}月", y, m.trim_start_matches('0')),
+            None => period.to_string(),
+        },
+    }
+}
+
+/// 将 YYYY-MM-DD 平移若干年
+fn shift_year(date: &str, years: i32) -> String {
+    match date.split_once('-') {
+        Some((y, rest)) => {
+            let y2 = y.parse::<i32>().unwrap_or(0) + years;
+            format!("{:04}-{}", y2, rest)
+        }
+        None => date.to_string(),
+    }
+}
+
+/// 一键导出标准全量财报（电子税务局模板：资产负债表/利润表/现金流量表/所有者权益变动表/附注）
+#[tauri::command]
+pub fn export_full_statement(
+    state: State<AppState>,
+    period: String,
+    period_type: Option<String>,
+    path: Option<String>,
+) -> Result<String, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let pt = period_type.as_deref().unwrap_or("quarterly");
+    let (start, end) = parse_period_range(&period, pt)?;
+    let prev_start = shift_year(&start, -1);
+    let prev_end = shift_year(&end, -1);
+
+    let get_setting = |key: &str| -> String {
+        db.query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            rusqlite::params![key],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_default()
+    };
+    let company = get_setting("company_name");
+    let tax_id = get_setting("company_tax_id");
+    let label = period_label(&period, pt);
+
+    let report = fs_report::build(&db, &company, &tax_id, &label, &start, &end, &prev_start, &prev_end)?;
+
+    let path = path
+        .filter(|p| !p.trim().is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::temp_dir().join(format!("{}_{}.xlsx", label, end))
+        });
+    fs_report::write_excel(&report, &path)?;
+    Ok(path.to_string_lossy().to_string())
 }

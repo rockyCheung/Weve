@@ -42,6 +42,14 @@
               <el-descriptions-item label="期间费用">¥{{ citReport.expenses.toFixed(2) }}</el-descriptions-item>
               <el-descriptions-item label="利润总额">¥{{ citReport.profit.toFixed(2) }}</el-descriptions-item>
               <el-descriptions-item label="适用税率">{{ (citReport.tax_rate * 100).toFixed(1) }}%</el-descriptions-item>
+              <el-descriptions-item label="季末资产总额(万元)">{{ (citReport.total_assets / 10000).toFixed(2) }} 万</el-descriptions-item>
+              <el-descriptions-item label="从业人数">{{ citReport.employee_count }} 人</el-descriptions-item>
+              <el-descriptions-item label="已计入成本费用的职工薪酬">
+                ¥{{ citReport.compensation_expensed.toFixed(2) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="实际支付给职工的应付职工薪酬">
+                ¥{{ citReport.compensation_paid.toFixed(2) }}
+              </el-descriptions-item>
               <el-descriptions-item label="应缴企业所得税">
                 <el-tag type="danger" size="large">¥{{ citReport.tax_due.toFixed(2) }}</el-tag>
               </el-descriptions-item>
@@ -118,6 +126,9 @@
             <span>财务报表</span>
             <el-button size="small" type="primary" style="float: right;" @click="exportReport('income_statement')" :disabled="!incomeStatement">
               导出利润表
+            </el-button>
+            <el-button size="small" type="success" style="float: right; margin-right: 8px;" @click="exportFullStatement" :disabled="!periodForm.financialPeriod">
+              导出全量报表
             </el-button>
             <el-button size="small" type="primary" style="float: right; margin-right: 8px;" @click="exportReport('balance_sheet')" :disabled="!balanceSheet">
               导出资产负债表
@@ -322,6 +333,7 @@
               <el-descriptions-item label="合计应缴">
                 <el-tag type="danger" size="large">¥{{ vatReport.total_tax_due.toFixed(2) }}</el-tag>
               </el-descriptions-item>
+              <el-descriptions-item label="期末资产总额(万元)">{{ (vatReport.total_assets / 10000).toFixed(2) }} 万</el-descriptions-item>
             </el-descriptions>
 
             <!-- 按税率明细 -->
@@ -353,6 +365,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { ElMessage } from 'element-plus'
 import { Document, PieChart, User, DataAnalysis, TrendCharts, ScaleToOriginal, Money } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
@@ -372,6 +385,7 @@ interface VatReport {
   surcharge_education: number
   surcharge_local: number
   total_tax_due: number
+  total_assets: number
   items: { tax_rate: number; output_amount: number; output_tax: number; input_amount: number; input_tax: number }[]
 }
 
@@ -385,6 +399,10 @@ interface CitReport {
   tax_rate: number
   tax_due: number
   is_small_profit: boolean
+  total_assets: number
+  employee_count: number
+  compensation_expensed: number
+  compensation_paid: number
 }
 
 interface PitReport {
@@ -462,7 +480,7 @@ const periodForm = reactive({
   citPeriod: `${dayjs().format('YYYY')}-Q${Math.floor(dayjs().month() / 3) + 1}`,
   pitPeriod: dayjs().format('YYYY-MM'),
   periodType: 'monthly',
-  financialPeriod: dayjs().format('YYYY-MM'),
+  financialPeriod: '',
 })
 
 const formatCitPeriod = (period: string) => {
@@ -488,21 +506,9 @@ const semiannuals = [
   { label: year + ' 下半年', value: year + '-H2' },
 ]
 
-const onPeriodTypeChange = (val: string) => {
-  switch (val) {
-    case 'monthly':
-      periodForm.financialPeriod = dayjs().format('YYYY-MM')
-      break
-    case 'quarterly':
-      periodForm.financialPeriod = year + '-Q1'
-      break
-    case 'semiannual':
-      periodForm.financialPeriod = year + '-H1'
-      break
-    case 'annual':
-      periodForm.financialPeriod = year
-      break
-  }
+const onPeriodTypeChange = (_val: string) => {
+  // 切换周期类型后清空具体期间，需用户重新选择后才能生成/导出
+  periodForm.financialPeriod = ''
 }
 
 const loading = reactive({
@@ -623,11 +629,62 @@ const exportReport = async (reportType: string) => {
     return
   }
 
+  const labels: Record<string, string> = {
+    vat_monthly: '增值税月报',
+    cit_quarterly: '企业所得税季报',
+    personal_income: '个人所得税',
+    income_statement: '利润表',
+    balance_sheet: '资产负债表',
+  }
+  const defaultName = `${labels[reportType] || reportType}_${period}.xlsx`
+
   try {
+    const target = await saveDialog({
+      title: '导出报表',
+      defaultPath: defaultName,
+      filters: [{ name: 'Excel 工作簿', extensions: ['xlsx'] }],
+    })
+    if (!target) return
+
     const path = await invoke('export_report', {
       reportType,
       period,
       format: 'xlsx',
+      periodType: periodForm.periodType,
+      path: target,
+    })
+    ElMessage.success(`报表已导出到: ${path}`)
+  } catch (e) {
+    ElMessage.error('导出失败: ' + e)
+  }
+}
+
+// 导出全量报表（电子税务局模板；期间与所选报表周期一致）
+const exportFullStatement = async () => {
+  const period = periodForm.financialPeriod
+  if (!period) {
+    ElMessage.warning('请先选择报表周期')
+    return
+  }
+  const labels: Record<string, string> = {
+    monthly: '月度报表',
+    quarterly: '季度报表',
+    semiannual: '半年度报表',
+    annual: '年度报表',
+  }
+  const defaultName = `${labels[periodForm.periodType] || '报表'}_${period}.xlsx`
+  try {
+    const target = await saveDialog({
+      title: '导出全量报表',
+      defaultPath: defaultName,
+      filters: [{ name: 'Excel 工作簿', extensions: ['xlsx'] }],
+    })
+    if (!target) return
+
+    const path = await invoke('export_full_statement', {
+      period,
+      periodType: periodForm.periodType,
+      path: target,
     })
     ElMessage.success(`报表已导出到: ${path}`)
   } catch (e) {

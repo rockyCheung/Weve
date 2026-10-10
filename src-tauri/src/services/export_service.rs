@@ -52,7 +52,10 @@ worksheet.write(7, 0, "三、应缴增值税").map_err(|e| e.to_string())?;
     let total_format = Format::new().set_bold().set_background_color(0xE2EFDA);
     worksheet.write_with_format(13, 0, "五、合计应缴税额", &total_format).map_err(|e| e.to_string())?;
     worksheet.write_with_format(13, 1, report.total_tax_due, &money_format).map_err(|e| e.to_string())?;
-    
+
+    worksheet.write_with_format(14, 0, "期末资产总额（万元）", &total_format).map_err(|e| e.to_string())?;
+    worksheet.write_with_format(14, 1, report.total_assets / 10000.0, &money_format).map_err(|e| e.to_string())?;
+
     // 税率明细
     worksheet.write(15, 0, "附：税率明细").map_err(|e| e.to_string())?;
     worksheet.write_with_format(16, 0, "税率", &header_format).map_err(|e| e.to_string())?;
@@ -120,7 +123,16 @@ pub fn export_cit_report_to_excel(report: &tax_engine::CitReport, path: &Path) -
     
     worksheet.write_with_format(10, 0, "七、应缴企业所得税", &total_format).map_err(|e| e.to_string())?;
     worksheet.write_with_format(10, 1, report.tax_due, &money_format).map_err(|e| e.to_string())?;
-    
+
+    worksheet.write_with_format(11, 0, "季末资产总额（万元）", &header_format).map_err(|e| e.to_string())?;
+    worksheet.write_with_format(11, 1, report.total_assets / 10000.0, &money_format).map_err(|e| e.to_string())?;
+    worksheet.write_with_format(12, 0, "从业人数", &header_format).map_err(|e| e.to_string())?;
+    worksheet.write_with_format(12, 1, report.employee_count, &money_format).map_err(|e| e.to_string())?;
+    worksheet.write_with_format(13, 0, "已计入成本费用的职工薪酬（本年累计）", &header_format).map_err(|e| e.to_string())?;
+    worksheet.write_with_format(13, 1, report.compensation_expensed, &money_format).map_err(|e| e.to_string())?;
+    worksheet.write_with_format(14, 0, "实际支付给职工的应付职工薪酬（本年累计）", &header_format).map_err(|e| e.to_string())?;
+    worksheet.write_with_format(14, 1, report.compensation_paid, &money_format).map_err(|e| e.to_string())?;
+
     worksheet.set_column_width(0, 35).map_err(|e| e.to_string())?;
     worksheet.set_column_width(1, 18).map_err(|e| e.to_string())?;
     

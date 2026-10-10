@@ -1,5 +1,29 @@
-use serde::{Deserialize, Serialize};
+use chrono::NaiveDate;
 use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
+
+/// 指定年月的最后一天（如有 2026 年 2 月 -> 2026-02-28）
+fn month_end_date(year: i32, month: u32) -> String {
+    let (ny, nm) = if month == 12 { (year + 1, 1) } else { (year, month + 1) };
+    NaiveDate::from_ymd_opt(ny, nm, 1)
+        .and_then(|d| d.pred_opt())
+        .map(|d| d.format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|| format!("{}-{:02}-28", year, month))
+}
+
+/// 截至某日的资产总额（元，按资产类科目“借-贷”汇总，与资产负债表口径一致）
+pub fn total_assets_at(conn: &Connection, end_date: &str) -> Result<f64, String> {
+    conn.query_row(
+        "SELECT COALESCE(SUM(ve.debit_amount) - SUM(ve.credit_amount), 0)
+         FROM accounts a
+         LEFT JOIN voucher_entries ve ON a.id = ve.account_id
+         LEFT JOIN vouchers v ON ve.voucher_id = v.id
+         WHERE a.is_active = 1 AND a.category = 'asset' AND (v.date IS NULL OR v.date <= ?1)",
+        rusqlite::params![end_date],
+        |row| row.get(0),
+    )
+    .map_err(|e| e.to_string())
+}
 
 // ==================== 增值税月报 ====================
 
@@ -17,6 +41,7 @@ pub struct VatReport {
     pub surcharge_education: f64, // 教育费附加 (3%)
     pub surcharge_local: f64,     // 地方教育附加 (2%)
     pub total_tax_due: f64,       // 合计应缴
+    pub total_assets: f64,        // 期末资产总额（元）
     pub items: Vec<VatReportItem>,
 }
 
@@ -93,6 +118,13 @@ pub fn generate_vat_report(conn: &Connection, period: &str) -> Result<VatReport,
     let surcharge_local = tax_due * 0.02;
     let total_tax_due = tax_due + surcharge_city + surcharge_education + surcharge_local;
 
+    // 期末资产总额（元）：取申报月份的月末
+    let end_date = month_end_date(
+        year.parse::<i32>().unwrap_or(2025),
+        month.parse::<u32>().unwrap_or(1),
+    );
+    let total_assets = total_assets_at(conn, &end_date)?;
+
     Ok(VatReport {
         period: period.to_string(),
         output_count,
@@ -106,6 +138,7 @@ pub fn generate_vat_report(conn: &Connection, period: &str) -> Result<VatReport,
         surcharge_education,
         surcharge_local,
         total_tax_due,
+        total_assets,
         items,
     })
 }
@@ -123,6 +156,10 @@ pub struct CitReport {
     pub tax_rate: f64,          // 适用税率
     pub tax_due: f64,           // 应缴企业所得税
     pub is_small_profit: bool,  // 是否小微企业优惠
+    pub total_assets: f64,      // 季末资产总额（元）
+    pub employee_count: i64,    // 从业人数
+    pub compensation_expensed: f64, // 已计入成本费用的职工薪酬（元，本年累计，2211 贷方）
+    pub compensation_paid: f64,     // 实际支付给职工的应付职工薪酬（元，本年累计，2211 借方）
 }
 
 /// 生成企业所得税季报（period 格式：YYYY-Qn，如 2026-Q1）
@@ -184,15 +221,42 @@ pub fn generate_cit_report(conn: &Connection, period: &str) -> Result<CitReport,
     let gross_profit = revenue - cost;
     let profit = gross_profit - expenses;
 
-    // 小微企业优惠税率判断（年应纳税所得额）
+    // 季末资产总额（元）与从业人数
+    let quarter_end = month_end_date(year.parse::<i32>().unwrap_or(2025), quarter_num as u32 * 3);
+    let total_assets = total_assets_at(conn, &quarter_end)?;
+    let employee_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM employees WHERE is_active = 1", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    // 附报事项-职工薪酬（本年累计，1 月 1 日至本期末）
+    // 已计入成本费用 = 应付职工薪酬贷方发生额；实际支付 = 应付职工薪酬借方发生额
+    let year_start = format!("{}-01-01", year);
+    let (compensation_expensed, compensation_paid): (f64, f64) = conn
+        .query_row(
+            "SELECT COALESCE(SUM(ve.credit_amount), 0), COALESCE(SUM(ve.debit_amount), 0)
+             FROM voucher_entries ve
+             JOIN accounts a ON ve.account_id = a.id
+             JOIN vouchers v ON ve.voucher_id = v.id
+             WHERE a.code = '2211' AND v.date >= ?1 AND v.date <= ?2",
+            rusqlite::params![year_start, quarter_end],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    // 小微企业优惠判断：年应纳税所得额≤300万 且 资产总额≤5000万 且 从业人数≤300
     // 简化：按季度利润 * 4 估算年利润
     let estimated_annual_profit = profit * 4.0;
-    let (tax_rate, is_small_profit) = if estimated_annual_profit <= 1_000_000.0 {
-        (0.025, true)  // 年利润100万以内，实际税负2.5%
-    } else if estimated_annual_profit <= 3_000_000.0 {
-        (0.05, true)   // 100-300万，实际税负5%
+    let qualifies = estimated_annual_profit <= 3_000_000.0
+        && total_assets <= 50_000_000.0
+        && employee_count <= 300;
+    let (tax_rate, is_small_profit) = if qualifies {
+        if estimated_annual_profit <= 1_000_000.0 {
+            (0.025, true)  // 年利润100万以内，实际税负2.5%
+        } else {
+            (0.05, true)   // 100-300万，实际税负5%
+        }
     } else {
-        (0.25, false)  // 超过300万，标准税率25%
+        (0.25, false)      // 不符合小微条件，标准税率25%
     };
 
     let tax_due = (profit * tax_rate).max(0.0);
@@ -202,11 +266,15 @@ pub fn generate_cit_report(conn: &Connection, period: &str) -> Result<CitReport,
         revenue,
         cost,
         gross_profit,
-        expenses,
         profit,
+        expenses,
         tax_rate,
         tax_due,
         is_small_profit,
+        total_assets,
+        employee_count,
+        compensation_expensed,
+        compensation_paid,
     })
 }
 
@@ -318,14 +386,16 @@ pub struct BalanceSheetItem {
 /// 生成资产负债表
 pub fn generate_balance_sheet(conn: &Connection, end_date: &str) -> Result<BalanceSheet, String> {
 
-    // 获取所有科目余额
+    // 获取所有科目截止 end_date 的余额（借方-贷方）
+    // 注意：日期条件必须放在 WHERE 中，否则 LEFT JOIN vouchers 只过滤 v 的列，
+    // 未来日期的凭证分录仍会参与 SUM，导致期末余额包含了本期间之后的数据。
     let mut stmt = conn.prepare(
         "SELECT a.code, a.name, a.category,
                 COALESCE(SUM(ve.debit_amount), 0) - COALESCE(SUM(ve.credit_amount), 0) as balance
          FROM accounts a
          LEFT JOIN voucher_entries ve ON a.id = ve.account_id
-         LEFT JOIN vouchers v ON ve.voucher_id = v.id AND v.date <= ?1
-         WHERE a.is_active = 1
+         LEFT JOIN vouchers v ON ve.voucher_id = v.id
+         WHERE a.is_active = 1 AND (v.date IS NULL OR v.date <= ?1)
          GROUP BY a.id, a.code, a.name, a.category
          ORDER BY a.code"
     ).map_err(|e| e.to_string())?;
@@ -336,6 +406,9 @@ pub fn generate_balance_sheet(conn: &Connection, end_date: &str) -> Result<Balan
     let mut total_assets = 0.0;
     let mut total_liabilities = 0.0;
     let mut total_equity = 0.0;
+    // 未结转的损益（收入-费用），需结转入所有者权益，才能保证
+    // 资产 = 负债 + 所有者权益
+    let mut retained_profit = 0.0;
 
     let items = stmt.query_map(rusqlite::params![end_date], |row| {
         let code: String = row.get(0)?;
@@ -348,27 +421,53 @@ pub fn generate_balance_sheet(conn: &Connection, end_date: &str) -> Result<Balan
     .collect::<Vec<_>>();
 
     for (code, name, category, balance) in items {
-        let item = BalanceSheetItem {
-            account_code: code,
-            account_name: name,
-            balance: balance.abs(),
-        };
-
+        // 资产按借方正数、负债/权益/收入按贷方正数、费用按借方正数展示，
+        // 不再使用 abs()，否则累计折旧等备抵科目会被错误地加进资产。
         match category.as_str() {
             "asset" => {
-                assets.push(item);
-                total_assets += balance.abs();
+                assets.push(BalanceSheetItem {
+                    account_code: code,
+                    account_name: name,
+                    balance,
+                });
+                total_assets += balance;
             }
             "liability" => {
-                liabilities.push(item);
-                total_liabilities += balance.abs();
+                let b = -balance;
+                liabilities.push(BalanceSheetItem {
+                    account_code: code,
+                    account_name: name,
+                    balance: b,
+                });
+                total_liabilities += b;
             }
             "equity" => {
-                equity.push(item);
-                total_equity += balance.abs();
+                let b = -balance;
+                equity.push(BalanceSheetItem {
+                    account_code: code,
+                    account_name: name,
+                    balance: b,
+                });
+                total_equity += b;
+            }
+            "income" => {
+                retained_profit += -balance;
+            }
+            "expense" => {
+                retained_profit -= balance;
             }
             _ => {}
         }
+    }
+
+    // 若尚未做期末结转（收入/费用科目仍有余额），将累计损益计入所有者权益
+    if retained_profit.abs() > 0.000001 {
+        equity.push(BalanceSheetItem {
+            account_code: "4103".to_string(),
+            account_name: "本年利润（未结转）".to_string(),
+            balance: retained_profit,
+        });
+        total_equity += retained_profit;
     }
 
     Ok(BalanceSheet {

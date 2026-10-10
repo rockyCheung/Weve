@@ -68,6 +68,7 @@ pub fn run() {
             commands::tax::generate_tax_report,
             commands::tax::get_saved_reports,
             commands::tax::export_report,
+            commands::tax::export_full_statement,
             // 税务日历命令
             commands::tax_calendar::generate_tax_calendar,
             commands::tax_calendar::get_tax_calendar,
