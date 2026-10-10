@@ -256,6 +256,7 @@ fn cash_flow(conn: &Connection, start: &str, end: &str) -> Result<CashFlow, Stri
 
 // ==================== 构建报表 ====================
 
+#[allow(clippy::too_many_arguments)]
 pub fn build(
     conn: &Connection,
     company_name: &str,
@@ -757,6 +758,7 @@ fn write_amount_sheet(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_equity(
     wb: &mut Workbook,
     r: &QuarterlyReport,
