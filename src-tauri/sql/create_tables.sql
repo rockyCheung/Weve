@@ -186,3 +186,31 @@ CREATE INDEX IF NOT EXISTS idx_voucher_entries_voucher ON voucher_entries(vouche
 CREATE INDEX IF NOT EXISTS idx_voucher_entries_account ON voucher_entries(account_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_type_date ON invoices(invoice_type, date);
 CREATE INDEX IF NOT EXISTS idx_tax_reports_type_period ON tax_reports(report_type, period);
+
+-- 智能记账模块
+CREATE TABLE IF NOT EXISTS smart_entitlement (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    license_token TEXT,
+    payload_json TEXT,
+    activated_at TEXT,
+    updates_until TEXT
+);
+CREATE TABLE IF NOT EXISTS smart_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scenario_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    definition TEXT NOT NULL,
+    is_builtin INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    priority INTEGER NOT NULL DEFAULT 100,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE TABLE IF NOT EXISTS smart_learning_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raw_text TEXT NOT NULL,
+    scenario_id TEXT,
+    entries TEXT NOT NULL,
+    adopted INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);

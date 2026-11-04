@@ -77,3 +77,8 @@ INSERT OR IGNORE INTO position_grades (name, code, base_salary_min, base_salary_
 ('专员', 'P2', 5000, 10000, 0.2, 1.0),
 ('主管', 'M1', 8000, 15000, 0.3, 1.2),
 ('经理', 'M2', 12000, 25000, 0.35, 1.5);
+
+-- 智能记账模块：服务端地址（可在客户端「LLM 设置」中修改）
+INSERT OR IGNORE INTO settings (key, value) VALUES
+('smart_activation_url', 'https://weve.pyrelle.asia/api/activate'),
+('smart_rulepack_url', 'https://weve.pyrelle.asia/api/rulepack');

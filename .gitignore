@@ -5,7 +5,7 @@ node_modules/
 dist/
 build/
 src-tauri/target/
-
+server
 # IDE
 .vscode/
 .idea/
@@ -41,3 +41,12 @@ src-tauri/backups/
 # Python
 __pycache__/
 *.pyc
+
+# 智能记账授权私钥（勿提交）
+tools/.smart_voucher_private_key
+tools/.demo_license
+tools
+# 授权服务本地数据库
+server/license.db
+server/*.db
+server/target/

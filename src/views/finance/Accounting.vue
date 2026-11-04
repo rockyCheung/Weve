@@ -394,6 +394,199 @@
           </el-col>
         </el-row>
       </el-tab-pane>
+
+      <!-- 智能录入 -->
+      <el-tab-pane name="smart">
+        <template #label>
+          <el-icon><MagicStick /></el-icon>
+          <span>智能录入</span>
+        </template>
+
+        <el-card v-if="!smartStatus?.entitled">
+          <template #header><span>智能记账模块</span></template>
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="该模块为付费功能"
+            description="请在下方输入平台提供的授权码（License Token）完成激活。激活后本机可离线使用。"
+          />
+          <div style="margin-top: 16px; display: flex; gap: 8px">
+            <el-input v-model="smartLicenseInput" placeholder="粘贴授权码（SV1.xxxx）" style="flex: 1" />
+            <el-button type="primary" :loading="smartActivating" @click="activateSmart">激活</el-button>
+          </div>
+          <el-button link type="primary" style="margin-top: 8px" @click="refreshSmartStatus"
+            >刷新状态</el-button
+          >
+        </el-card>
+
+        <div v-else>
+          <el-card style="margin-bottom: 12px">
+            <template #header>
+              <span>智能录入</span>
+              <el-tag type="success" size="small" style="float: right">
+                已授权 · {{ smartStatus?.customer || "永久版" }}
+              </el-tag>
+            </template>
+            <el-form :inline="true">
+              <el-form-item label="基准日期">
+                <el-date-picker v-model="smartDate" type="date" value-format="YYYY-MM-DD" />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="smartParsing" @click="parseSmart">解析</el-button>
+              </el-form-item>
+            </el-form>
+            <el-input
+              v-model="smartText"
+              type="textarea"
+              :rows="3"
+              placeholder="每行一条，例如：&#10;今天收取服务费 100 元&#10;昨日购买原材料 80 元"
+            />
+            <div style="margin-top: 8px; display: flex; align-items: center; gap: 12px">
+              <el-button link type="primary" @click="openScenarioManager">业务模板管理</el-button>
+              <el-button link type="primary" @click="openLlmConfig">LLM 设置</el-button>
+              <el-button link type="primary" :loading="smartUpdatingRulepack" @click="updateRulepack"
+                >更新规则包</el-button
+              >
+              <el-tag v-if="rulepackStatus" size="small" type="info">
+                规则包 {{ rulepackStatus.installed ? rulepackStatus.version : "未安装" }}
+                <span v-if="rulepackStatus.installed">· {{ rulepackStatus.scenario_count }} 条</span>
+              </el-tag>
+            </div>
+          </el-card>
+
+          <el-alert
+            v-for="(n, i) in smartNotes"
+            :key="'note-' + i"
+            :title="n"
+            type="warning"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 6px"
+          />
+
+          <el-card v-for="(d, di) in smartDrafts" :key="di" style="margin-bottom: 12px">
+            <template #header>
+              <span>{{ d.summary }}</span>
+              <el-tag size="small" style="margin-left: 8px">{{ d.scenario_name }}</el-tag>
+              <el-tag
+                size="small"
+                :type="d.confidence >= 0.8 ? 'success' : 'warning'"
+                style="margin-left: 8px"
+                >置信度 {{ (d.confidence * 100).toFixed(0) }}%</el-tag
+              >
+              <el-tag size="small" type="info" style="margin-left: 8px">{{ d.date }}</el-tag>
+              <el-button size="small" type="danger" style="float: right" @click="removeDraft(di)"
+                >移除</el-button
+              >
+            </template>
+            <el-table :data="d.entries" size="small" border>
+              <el-table-column prop="account_code" label="科目编码" width="110" />
+              <el-table-column prop="account_name" label="科目名称" />
+              <el-table-column label="借方" width="130">
+                <template #default="s">¥{{ s.row.debit_amount.toFixed(2) }}</template>
+              </el-table-column>
+              <el-table-column label="贷方" width="130">
+                <template #default="s">¥{{ s.row.credit_amount.toFixed(2) }}</template>
+              </el-table-column>
+            </el-table>
+            <div
+              v-for="(w, wi) in d.warnings"
+              :key="wi"
+              style="color: #e6a23c; font-size: 12px; margin-top: 4px"
+            >
+              ⚠ {{ w }}
+            </div>
+          </el-card>
+
+          <div v-if="smartDrafts.length" style="margin-top: 8px">
+            <el-button type="primary" :loading="smartCommitting" @click="commitSmart"
+              >确认生成 {{ smartDrafts.length }} 张凭证</el-button
+            >
+          </div>
+        </div>
+
+        <el-dialog v-model="scenarioDialogVisible" title="业务模板管理" width="760px">
+          <el-table :data="smartScenarios" size="small" border max-height="300">
+            <el-table-column prop="name" label="名称" width="140" />
+            <el-table-column prop="id" label="ID" width="150" />
+            <el-table-column label="关键词">
+              <template #default="s">{{ (s.row.keywords || []).join("、") }}</template>
+            </el-table-column>
+            <el-table-column label="来源" width="90">
+              <template #default="s">
+                <el-tag size="small" :type="s.row.is_builtin ? 'info' : 'success'">
+                  {{ s.row.is_builtin ? "内置" : "自定义" }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="90">
+              <template #default="s">
+                <el-button
+                  v-if="!s.row.is_builtin"
+                  size="small"
+                  type="danger"
+                  link
+                  @click="deleteScenario(s.row.id)"
+                  >删除</el-button
+                >
+              </template>
+            </el-table-column>
+          </el-table>
+          <div style="margin-top: 12px">
+            <div style="margin-bottom: 4px; font-size: 13px; color: #606266">
+              新增/编辑自定义模板（JSON，ID 唯一）
+            </div>
+            <el-input v-model="scenarioJson" type="textarea" :rows="8" />
+            <el-button size="small" type="primary" style="margin-top: 8px" @click="saveScenario"
+              >保存模板</el-button
+            >
+          </div>
+        </el-dialog>
+
+        <el-dialog v-model="llmDialogVisible" title="LLM 兜底设置（自带 Key）" width="560px">
+          <el-form label-width="110px">
+            <el-form-item label="启用 LLM 兜底">
+              <el-switch v-model="llmForm.enabled" />
+            </el-form-item>
+            <el-form-item label="服务商">
+              <el-input v-model="llmForm.provider" placeholder="如 dashscope / openai / deepseek" />
+            </el-form-item>
+            <el-form-item label="接口地址">
+              <el-input v-model="llmForm.endpoint" placeholder="https://.../v1/chat/completions" />
+            </el-form-item>
+            <el-form-item label="模型">
+              <el-input v-model="llmForm.model" placeholder="如 qwen-plus / gpt-4o-mini" />
+            </el-form-item>
+            <el-form-item label="API Key">
+              <el-input v-model="llmForm.api_key" type="password" show-password />
+            </el-form-item>
+            <el-divider content-position="left">服务端地址（运营配置）</el-divider>
+            <el-form-item label="授权兑换地址">
+              <el-input
+                v-model="llmForm.activation_url"
+                placeholder="https://your-server/api/activate"
+              />
+            </el-form-item>
+            <el-form-item label="规则包地址">
+              <el-input
+                v-model="llmForm.rulepack_url"
+                placeholder="https://your-server/api/rulepack"
+              />
+            </el-form-item>
+          </el-form>
+          <el-alert
+            type="warning"
+            :closable="false"
+            show-icon
+            title="仅在规则无法识别时调用；会把业务描述、金额与科目列表发送给你填写的服务商，请确认知悉。"
+          />
+          <template #footer>
+            <el-button @click="llmDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="llmSaving" @click="saveLlmConfig">保存</el-button>
+          </template>
+        </el-dialog>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 科目对话框 -->
@@ -532,7 +725,7 @@
 import { ref, computed, onMounted, reactive } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { UploadFilled, Paperclip, Document, Edit, ScaleToOriginal, CreditCard, Folder } from "@element-plus/icons-vue";
+import { UploadFilled, Paperclip, Document, Edit, ScaleToOriginal, CreditCard, Folder, MagicStick } from "@element-plus/icons-vue";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { open as openPath } from "@tauri-apps/plugin-shell";
 import type { UploadFile } from "element-plus";
@@ -971,9 +1164,256 @@ const importBankData = async () => {
   ElMessage.success("导入功能待实现");
 };
 
+// ==================== 智能记账 ====================
+interface SmartDraftEntry {
+  account_code: string;
+  account_name: string;
+  debit_amount: number;
+  credit_amount: number;
+}
+interface SmartDraft {
+  raw_text: string;
+  date: string;
+  summary: string;
+  scenario_id: string;
+  scenario_name: string;
+  entries: SmartDraftEntry[];
+  confidence: number;
+  warnings: string[];
+}
+interface SmartModuleStatus {
+  entitled: boolean;
+  customer: string;
+  edition: string;
+  updates_until: string;
+  licensed_at: string;
+}
+
+const smartStatus = ref<SmartModuleStatus | null>(null);
+const smartLicenseInput = ref("");
+const smartActivating = ref(false);
+const smartText = ref("");
+const smartDate = ref(dayjs().format("YYYY-MM-DD"));
+const smartParsing = ref(false);
+const smartDrafts = ref<SmartDraft[]>([]);
+const smartNotes = ref<string[]>([]);
+const smartCommitting = ref(false);
+const smartScenarios = ref<any[]>([]);
+const scenarioDialogVisible = ref(false);
+const scenarioJson = ref(`{
+  "id": "custom_expense_meal",
+  "name": "业务招待餐费",
+  "keywords": ["餐费", "招待", "餐饮"],
+  "direction": "out",
+  "category": "expense",
+  "amount_tax": "inclusive",
+  "tax": { "mode": "input" },
+  "settlement": [
+    { "when": ["未付", "赊", "欠"], "account": "2202" },
+    { "when": ["现金"], "account": "1001" },
+    { "default": true, "account": "1002" }
+  ],
+  "entries": {
+    "general": [
+      { "side": "debit", "account": "6602", "amount": "net" },
+      { "side": "debit", "account": "2221", "amount": "tax" },
+      { "side": "credit", "account": "{{settlement}}", "amount": "total" }
+    ],
+    "small": [
+      { "side": "debit", "account": "6602", "amount": "total" },
+      { "side": "credit", "account": "{{settlement}}", "amount": "total" }
+    ]
+  }
+}`);
+
+const rulepackStatus = ref<any>(null);
+const smartUpdatingRulepack = ref(false);
+const llmDialogVisible = ref(false);
+const llmSaving = ref(false);
+const llmForm = reactive({
+  enabled: false,
+  provider: "",
+  endpoint: "",
+  model: "",
+  api_key: "",
+  activation_url: "",
+  rulepack_url: "",
+});
+
+const loadRulepackStatus = async () => {
+  try {
+    rulepackStatus.value = await invoke("smart_rulepack_status");
+  } catch (e) {
+    rulepackStatus.value = null;
+  }
+};
+
+const updateRulepack = async () => {
+  smartUpdatingRulepack.value = true;
+  try {
+    rulepackStatus.value = await invoke("smart_rulepack_update");
+    ElMessage.success("规则包已更新");
+  } catch (e) {
+    ElMessage.error("更新失败: " + e);
+  } finally {
+    smartUpdatingRulepack.value = false;
+  }
+};
+
+const openLlmConfig = async () => {
+  try {
+    const c: any = await invoke("smart_llm_get_config");
+    llmForm.enabled = !!c.enabled;
+    llmForm.provider = c.provider || "";
+    llmForm.endpoint = c.endpoint || "";
+    llmForm.model = c.model || "";
+    llmForm.api_key = c.api_key || "";
+    const all: any = await invoke("get_all_settings");
+    llmForm.activation_url = all["smart_activation_url"] || "";
+    llmForm.rulepack_url = all["smart_rulepack_url"] || "";
+    llmDialogVisible.value = true;
+  } catch (e) {
+    ElMessage.error("读取配置失败: " + e);
+  }
+};
+
+const saveLlmConfig = async () => {
+  llmSaving.value = true;
+  try {
+    await invoke("smart_llm_save_config", {
+      config: {
+        enabled: llmForm.enabled,
+        provider: llmForm.provider,
+        endpoint: llmForm.endpoint,
+        model: llmForm.model,
+        api_key: llmForm.api_key,
+      },
+    });
+    await invoke("save_settings_batch", {
+      settings: [
+        { key: "smart_activation_url", value: llmForm.activation_url },
+        { key: "smart_rulepack_url", value: llmForm.rulepack_url },
+      ],
+    });
+    ElMessage.success("已保存");
+    llmDialogVisible.value = false;
+  } catch (e) {
+    ElMessage.error("保存失败: " + e);
+  } finally {
+    llmSaving.value = false;
+  }
+};
+
+const refreshSmartStatus = async () => {
+  try {
+    smartStatus.value = await invoke("smart_module_status");
+    if (smartStatus.value?.entitled) {
+      await loadRulepackStatus();
+    }
+  } catch (e) {
+    smartStatus.value = null;
+  }
+};
+
+const activateSmart = async () => {
+  if (!smartLicenseInput.value.trim()) {
+    ElMessage.warning("请输入授权码");
+    return;
+  }
+  smartActivating.value = true;
+  try {
+    smartStatus.value = await invoke("smart_activate_code", {
+      code: smartLicenseInput.value.trim(),
+    });
+    if (smartStatus.value?.entitled) {
+      ElMessage.success("激活成功");
+      smartLicenseInput.value = "";
+    }
+  } catch (e) {
+    ElMessage.error("激活失败: " + e);
+  } finally {
+    smartActivating.value = false;
+  }
+};
+
+const parseSmart = async () => {
+  if (!smartText.value.trim()) {
+    ElMessage.warning("请输入业务描述");
+    return;
+  }
+  smartParsing.value = true;
+  try {
+    const res: any = await invoke("smart_parse", {
+      text: smartText.value,
+      date: smartDate.value,
+    });
+    smartDrafts.value = res.drafts || [];
+    smartNotes.value = res.notes || [];
+    if (!smartDrafts.value.length) {
+      ElMessage.warning("未解析出可生成的凭证");
+    }
+  } catch (e) {
+    ElMessage.error("解析失败: " + e);
+  } finally {
+    smartParsing.value = false;
+  }
+};
+
+const removeDraft = (i: number) => {
+  smartDrafts.value.splice(i, 1);
+};
+
+const commitSmart = async () => {
+  if (!smartDrafts.value.length) return;
+  smartCommitting.value = true;
+  try {
+    const nos: any = await invoke("smart_commit", { drafts: smartDrafts.value });
+    ElMessage.success(`已生成 ${nos.length} 张凭证`);
+    smartDrafts.value = [];
+    smartNotes.value = [];
+    smartText.value = "";
+    await fetchVouchers();
+  } catch (e) {
+    ElMessage.error("生成失败: " + e);
+  } finally {
+    smartCommitting.value = false;
+  }
+};
+
+const openScenarioManager = async () => {
+  try {
+    smartScenarios.value = await invoke("smart_scenarios_list");
+    scenarioDialogVisible.value = true;
+  } catch (e) {
+    ElMessage.error("加载模板失败: " + e);
+  }
+};
+
+const saveScenario = async () => {
+  try {
+    JSON.parse(scenarioJson.value);
+    await invoke("smart_scenario_save", { definition: scenarioJson.value });
+    ElMessage.success("模板已保存");
+    smartScenarios.value = await invoke("smart_scenarios_list");
+  } catch (e) {
+    ElMessage.error("保存失败: " + e);
+  }
+};
+
+const deleteScenario = async (id: string) => {
+  try {
+    await invoke("smart_scenario_delete", { scenarioId: id });
+    smartScenarios.value = await invoke("smart_scenarios_list");
+    ElMessage.success("已删除");
+  } catch (e) {
+    ElMessage.error("删除失败: " + e);
+  }
+};
+
 onMounted(() => {
   fetchAccounts();
   fetchVouchers();
+  refreshSmartStatus();
 });
 </script>
 

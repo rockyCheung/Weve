@@ -32,4 +32,7 @@ r2d2 = "0.8"
 r2d2_sqlite = "0.24"
 uuid = { version = "1", features = ["v4"] }
 regex = "1"
+ring = "0.17"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 dirs-next = "2.0"
