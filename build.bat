@@ -1,27 +1,43 @@
 @echo off
-REM 小微企业管理助手 - Windows 构建脚本
+setlocal
+cd /d "%~dp0"
 
-echo ===== 开始构建小微企业管理助手 =====
+echo ===== Build: Small Business Manager (Windows) =====
 
-REM 检查依赖
-echo ^>^>^> 检查依赖...
-where node || echo 错误: 需要安装 Node.js && exit /b 1
-where cargo || echo 错误: 需要安装 Rust && exit /b 1
-where npm || echo 错误: 需要安装 npm && exit /b 1
+where node >nul 2>nul
+if errorlevel 1 (
+  echo ERROR: Node.js not found in PATH.
+  exit /b 1
+)
 
-REM 安装前端依赖
-echo ^>^>^> 安装前端依赖...
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo ERROR: npm not found in PATH.
+  exit /b 1
+)
+
+where cargo >nul 2>nul
+if errorlevel 1 (
+  echo ERROR: Rust/Cargo not found in PATH.
+  exit /b 1
+)
+
+echo [1/3] Installing frontend dependencies...
 call npm install
+if errorlevel 1 goto :fail
 
-REM 构建前端
-echo ^>^>^> 构建前端...
+echo [2/3] Building frontend...
 call npm run build
+if errorlevel 1 goto :fail
 
-REM 构建 Tauri 应用
-echo ^>^>^> 构建桌面应用...
-echo 目标平台: Windows
-call cargo tauri build
+echo [3/3] Building Tauri app...
+call npm run tauri build
+if errorlevel 1 goto :fail
 
-echo ===== 构建完成 =====
-echo 安装包位置: src-tauri\target\release\bundle\
-pause
+echo ===== Build finished =====
+echo Bundles: src-tauri\target\release\bundle\
+exit /b 0
+
+:fail
+echo ===== Build failed =====
+exit /b 1

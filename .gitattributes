@@ -1,0 +1,5 @@
+# 批处理/PowerShell 使用 CRLF，Shell 使用 LF，避免跨平台换行导致脚本失效
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.sh  text eol=lf
